@@ -1,0 +1,71 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+.vscode/
+.idea/
+
+# Project-specific generated and packaged output
+VideoCaptureBuild/
+output/
+.codex-temp/
+Build/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.pdb
+*.obj
+*.dll
+*.exe
+*.pak
+*.ucas
+*.utoc
+*.zip
+*.7z
+*.rar
+*.mp4
+*.mov
+*.avi
+*.wmv
+
+# Assets are intentionally excluded from the public code-review repository.
+# Their redistribution rights have not been verified as a complete set.
+Content/
+SourceAssets/
+ThirdPartySource/
+
+# Local documentation sources and generated binary documents
+Documentation/Controls/assets/
+Documentation/**/*.docx
+Documentation/**/*.pdf
+Documentation/**/*.png
+Documentation/**/*.jpg
+Documentation/**/*.jpeg
+Documentation/**/*.zip
+Documentation/**/*.py
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.temp
+*.log
+*.bak
+*.old
+*~
+
+# Credentials and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+credentials.*
+secrets.*
