@@ -39,16 +39,6 @@ Content/
 SourceAssets/
 ThirdPartySource/
 
-# Local documentation sources and generated binary documents
-Documentation/Controls/assets/
-Documentation/**/*.docx
-Documentation/**/*.pdf
-Documentation/**/*.png
-Documentation/**/*.jpg
-Documentation/**/*.jpeg
-Documentation/**/*.zip
-Documentation/**/*.py
-
 # Operating system and editor files
 .DS_Store
 Thumbs.db
