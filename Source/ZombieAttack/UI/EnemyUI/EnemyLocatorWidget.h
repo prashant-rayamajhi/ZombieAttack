@@ -4,7 +4,7 @@
 #include "Blueprint/UserWidget.h"
 #include "EnemyLocatorWidget.generated.h"
 
-//30秒以上見つけられていない敵の方向を、画面端の赤い矢印で案内します。
+//見失った敵と解放された出口を、種類・距離・画面外の方向で案内する。
 //アウトライン判定はEnemyCharaが担当し、このWidgetは最寄り対象の表示だけを担当します。
 UCLASS()
 class ZOMBIEATTACK_API UEnemyLocatorWidget : public UUserWidget
@@ -13,8 +13,7 @@ class ZOMBIEATTACK_API UEnemyLocatorWidget : public UUserWidget
     GENERATED_BODY()
 
   protected:
-    virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
-                              FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle,
-                              //overrideかを示します。
-                              bool bParentEnabled) const override;
+    virtual int32 NativePaint(const FPaintArgs& _args, const FGeometry& _geometry, const FSlateRect& _cullingRect,
+                              FSlateWindowElementList& _drawElements, int32 _layerId, const FWidgetStyle& _widgetStyle,
+                              bool _bParentEnabled) const override;
 };

@@ -21,15 +21,15 @@ struct FWaveEnemyData
     GENERATED_BODY()
 
   public:
-    //enemiesToSpawnをゲーム処理から参照できるように管理します。
+    //m_enemiesToSpawnをゲーム処理から参照できるように管理します。
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave")
-    //enemiesToSpawnをゲーム処理から参照できるように管理します。
-    int32 enemiesToSpawn = 0;
+    //m_enemiesToSpawnをゲーム処理から参照できるように管理します。
+    int32 m_enemiesToSpawn = 0;
 
-    //timeBetweenSpawnsを秒単位で指定します。
+    //m_spawnIntervalを秒単位で指定します。
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave")
-    //timeBetweenSpawnsを秒単位で指定します。
-    float timeBetweenSpawns = 2.0f;
+    //m_spawnIntervalを秒単位で指定します。
+    float m_spawnInterval = 2.0f;
 
     //wave敵クラスesをゲーム処理から参照できるように管理します。
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave")
@@ -39,7 +39,7 @@ struct FWaveEnemyData
     //bossクラスをゲーム処理から参照できるように管理します。
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Boss")
     //bossクラスをゲーム処理から参照できるように管理します。
-    TSubclassOf<AEnemyChara> bossClass;
+    TSubclassOf<AEnemyChara> m_bossClass;
 };
 
 //生成Enemiesの動作をまとめたクラス
@@ -64,9 +64,7 @@ class ZOMBIEATTACK_API ASpawnEnemies : public AActor
     //PrepareAllEnemiesForIntro()で生成された敵を解放する関数
     UFUNCTION(BlueprintCallable, Category = "Spawn|Intro")
     void ReleasePreparedEnemies();
-
-    //NotifyGoalActivatedは、NotifyGoalActivatedの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
-    static void NotifyGoalActivated(UWorld* World);
+    static void NotifyGoalActivated(UWorld* _pWorld);
 
   protected:
     //AActorのBeginPlay()とTick()をオーバーライドします。

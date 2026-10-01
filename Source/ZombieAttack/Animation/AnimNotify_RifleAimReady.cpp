@@ -8,11 +8,7 @@ void UAnimNotify_RifleAimReady::Notify(USkeletalMeshComponent* _meshComp, UAnimS
                                        const FAnimNotifyEventReference& _eventReference)
 {
     Super::Notify(_meshComp, _animation, _eventReference);
-
-    //「!_meshComp」が成立するとき、続けて「APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner())」を判定します。
     if (!_meshComp) { return; }
-
-    //「APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner())」が成立するとき、FinishRifleAimTransitionFromAnimationを呼び出します。
     if (APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner()))
     {
         player->FinishRifleAimTransitionFromAnimation();

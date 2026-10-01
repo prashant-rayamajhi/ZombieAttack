@@ -10,13 +10,9 @@
 namespace
 {
 template <typename TWidget>
-//ResolveWidgetClassは、ResolveWidgetClassの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
 TSubclassOf<TWidget> ResolveWidgetClass(const TSoftClassPtr<TWidget>& _configuredClass, TSubclassOf<TWidget> _fallbackClass)
 {
-    //「UClass* loadedClass = _configuredClass.LoadSynchronous()」が成立するとき、この関数を終了します。
     if (UClass* loadedClass = _configuredClass.LoadSynchronous()) { return loadedClass; }
-
-    //_fallbackClassは、生成または表示するUnrealクラスを指定するために使います。
     return _fallbackClass;
 }
 //名前空間を閉じます。
@@ -45,9 +41,7 @@ UZombieAttackUISettings::UZombieAttackUISettings()
 //GameFlowWidgetクラスを取得して呼び出し元へ返します。
 TSubclassOf<UGameFlowScreenWidget> UZombieAttackUISettings::GetGameFlowWidgetClass(const FString& _levelName) const
 {
-    //configuredClassは、&m_gameStartWidgetClassから取得した参照を後続の呼び出しで使います。
     const TSoftClassPtr<UGameFlowScreenWidget>* configuredClass = &m_gameStartWidgetClass;
-    //「_levelName.Equals(TEXT("GameClear"), ESearchCase::IgnoreCase)」が成立するとき、configuredClassを更新します。
     if (_levelName.Equals(TEXT("GameClear"), ESearchCase::IgnoreCase))
     {
         configuredClass = &m_gameClearWidgetClass;

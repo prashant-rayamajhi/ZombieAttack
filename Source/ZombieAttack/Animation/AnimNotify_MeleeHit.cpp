@@ -14,12 +14,10 @@ void UAnimNotify_MeleeHit::Notify(USkeletalMeshComponent* _meshComp, UAnimSequen
 
     //メッシュコンポーネントの所有者をAPlayerChara型にキャスト
     APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner());
-    //「!player」が成立するとき、GetCurrentWeaponを呼び出します。
     if (!player) { return; }
 
     //プレイヤーの現在の武器をAMeleeWeapon型にキャスト
     AMeleeWeapon* meleeWeapon = Cast<AMeleeWeapon>(player->GetCurrentWeapon());
-    //「!meleeWeapon」が成立するとき、ExecuteHitを呼び出します。
     if (!meleeWeapon) { return; }
 
     //メレー武器のヒット処理を実行

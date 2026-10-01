@@ -73,6 +73,9 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     //UtilityAIが距離評価に使う近接攻撃距離
     virtual float GetBossMeleeRange() const;
 
+    //足元中心の衝撃波が届く間合いを、AIが使うカプセル間の距離へ換算する。
+    float GetSlamStartRange() const;
+
     //UtilityAIが攻撃を要求し始める距離関数
     virtual float GetBossAttackRequestRange() const;
 
@@ -81,6 +84,10 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
 
     //AnimNotify_BossAttackHitから呼ばれる攻撃判定
     virtual void PerformBossAttackHit();
+    //通常敵用の命中通知でも、ボス固有の攻撃判定へ渡す
+    virtual void PerformAttackHit(float _damageMultiplier = 1.f) override { PerformBossAttackHit(); }
+    //通常連撃は通知区間の手足だけに当たり判定を付け、衝撃波と分ける。
+    virtual void SetAttackCollisionEnabled(bool _bEnabled) override;
 
     //BeginAttackVFXWindowは、名前が示す動作を開始するための初期状態を整えます。
     virtual void BeginAttackVFXWindow() override;
@@ -104,6 +111,8 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     bool IsTransitioning() const { return m_bIsTransitioning; }
 
   protected:
+    //死亡後にフェーズ移行や攻撃タイマーが再発火しないよう破棄する
+    virtual void PlayDeathAnimationAndDie() override;
     //ゲーム開始時に呼ばれる関数
     virtual void BeginPlay() override;
 
@@ -180,14 +189,6 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     UPROPERTY(EditDefaultsOnly, Category = "Boss|VFX", meta = (ClampMin = "0.0"))
     float m_powerSlamEffectLeadTime;
 
-    //通常攻撃の手元から発生する円形攻撃の半径です。
-    UPROPERTY(EditDefaultsOnly, Category = "Boss|VFX", meta = (ClampMin = "1.0"))
-    float m_lightComboEffectRadius;
-
-    //円形攻撃が上下階のプレイヤーへ誤って当たらないための高さ制限です。
-    UPROPERTY(EditDefaultsOnly, Category = "Boss|VFX", meta = (ClampMin = "1.0"))
-    float m_lightComboVerticalTolerance;
-
     //攻撃パターンごとに識別しやすいエフェクトを割り当て、Blueprintから既定値を差し替えられるようにします。
     UPROPERTY(EditDefaultsOnly, Category = "Boss|VFX")
     TObjectPtr<UNiagaraSystem> m_pComboImpactVFX;
@@ -213,6 +214,10 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     TObjectPtr<UNiagaraSystem> m_pPhaseTransitionVFX;
 
   private:
+    //攻撃、コンボ、フェーズ移行に関係する予約をまとめて取り消す
+    void ClearCombatTimers();
+    //終了通知の重複で硬直時間が延びるのを防ぐ
+    bool m_bRecovering = false;
     //ボスの攻撃パターンを選択する関数
     EBossAttackPattern ChoosePattern() const;
 
@@ -225,6 +230,8 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     void DoPowerSlam();
     //DoChargeRushは、名前が示す攻撃または移動を実行します。
     void DoChargeRush();
+    //突進方向を開始時に固定し、衝突を保った歩行移動で走り込む。
+    void UpdateChargeRush(float _deltaTime);
     //DoBackStepは、名前が示す攻撃または移動を実行します。
     void DoBackStep();
     //PowerSlamエフェクトを作成します。
@@ -279,6 +286,16 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     //Utility AIが算出した予測迎撃地点を保持し、突進先のずれを防ぎます。
     //突進攻撃がプレイヤーの更新前または現在位置へ不用意に戻ることを防ぎます。
     FVector m_requestedTargetLocation;
+    //突進開始時の方向を保ち、走行中にプレイヤーを追尾して曲がらないようにする。
+    FVector m_rushDirection = FVector::ZeroVector;
+    //走行開始からの時間で、予備動作と接触判定の区間を分ける。
+    float m_rushElapsed = 0.0f;
+    //走行クリップ二周期の長さに突進の移動時間を合わせる。
+    float m_rushDuration = 0.0f;
+    //同じ突進で接触判定を繰り返し初期化しないための開始記録。
+    bool m_bRushContactStarted = false;
+    //スラムの接地通知が重なっても、一回の攻撃で二重にダメージを与えない。
+    bool m_bSlamHitResolved = false;
 
     //ボスの攻撃クールダウンタイマー
     FTimerHandle m_attackCooldownTimer;

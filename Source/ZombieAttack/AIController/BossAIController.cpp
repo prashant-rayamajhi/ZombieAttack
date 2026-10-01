@@ -4,6 +4,7 @@
 #include "ZombieAttack/Player/PlayerChara.h"
 #include "NavigationSystem.h"
 #include "Navigation/PathFollowingComponent.h"
+#include "Components/CapsuleComponent.h"
 
 //コンストラクタ
 ABossAIController::ABossAIController()
@@ -117,7 +118,7 @@ void ABossAIController::EvaluateDecision()
     }
 
     //ボスが戦術行動を実行できない、または現在の状態が攻撃中の場合は次の意思決定をスケジュールして終了
-    if (!boss->CanPerformTacticalAction() || GetCurrentState() == EEnemyAIState::Attack)
+    if (IsAlertReactionActive() || !boss->CanPerformTacticalAction() || GetCurrentState() == EEnemyAIState::Attack)
     {
         ScheduleNextDecision(0.2f);
         return;
@@ -125,7 +126,6 @@ void ABossAIController::EvaluateDecision()
 
     //現在の時間を取得し、次の意思決定が許可されているかを確認
     const float currentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    //「currentTime < m_nextAllowedDecisionTime」が成立するとき、ScheduleNextDecisionを呼び出します。
     if (currentTime < m_nextAllowedDecisionTime)
     {
         ScheduleNextDecision(m_nextAllowedDecisionTime - currentTime);
@@ -134,6 +134,11 @@ void ABossAIController::EvaluateDecision()
 
     //プレイヤーへの視線があるかどうかを確認
     const bool bHasLineOfSight = LineOfSightTo(player);
+    if (!bHasLineOfSight)
+    {
+        ScheduleNextDecision(0.3f);
+        return;
+    }
 
     //ユーティリティAIコンポーネントを使用して意思決定コンテキストを構築
     const FBossDecisionContext context = m_pUtilityAI ? m_pUtilityAI->BuildDecisionContext(boss, player, bHasLineOfSight) : FBossDecisionContext();
@@ -141,14 +146,11 @@ void ABossAIController::EvaluateDecision()
     //ユーティリティAIコンポーネントを使用して戦術行動を選択
     const EBossTacticalAction action = m_pUtilityAI ? m_pUtilityAI->ChooseAction(context, boss) : EBossTacticalAction::Approach;
 
-    //デバッグ用のログを出力
-
     //選択された戦術行動を実行
     if (ExecuteAction(action, boss, player, context))
     {
         //戦術行動が成功した場合、現在の戦術行動を更新し、ユーティリティAIコンポーネントに記録
         m_currentAction = action;
-        //「m_pUtilityAI」が成立するとき、RecordActionを呼び出します。
         if (m_pUtilityAI)
         {
             m_pUtilityAI->RecordAction(action);
@@ -173,12 +175,10 @@ bool ABossAIController::MoveToTacticalLocation(const FVector& _desiredLocation, 
     UWorld* world = GetWorld();
     //現在のを返します。
     UNavigationSystemV1* NavSystem = world ? UNavigationSystemV1::GetCurrent(world) : nullptr;
-    //「!NavSystem」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!NavSystem) { return false; }
 
     //ナビゲーションシステムを使用して、希望する位置をナビゲーションメッシュ上に投影
     FNavLocation projected;
-    //「!NavSystem->ProjectPointToNavigation(_desiredLocation, projected, m_navProjectionExtent)」が成立するとき、この関数を終了します。
     if (!NavSystem->ProjectPointToNavigation(_desiredLocation, projected, m_navProjectionExtent)) { return false; }
 
     //移動要求を送信
@@ -199,7 +199,6 @@ bool ABossAIController::ExecuteAction(EBossTacticalAction _action, ABossChara* _
     const FVector bossLocation = _boss->GetActorLocation();
     //プレイヤー位置を保持します。
     const FVector playerLocation = _player->GetActorLocation();
-    //fromPlayerToBossは、(bossLocation - playerLocation).GetSafeNormal2D()から求めた空間情報を位置または向きの計算に使います。
     FVector fromPlayerToBoss = (bossLocation - playerLocation).GetSafeNormal2D();
 
     //プレイヤーからボスへの方向がゼロベクトルの場合、ボスの前方ベクトルを使用
@@ -224,46 +223,46 @@ bool ABossAIController::ExecuteAction(EBossTacticalAction _action, ABossChara* _
     //戦術行動が接近の場合、プレイヤーに近づく
     case EBossTacticalAction::Approach:
     {
-        //desiredは、_context.PredictedPlayerLocation + fromPlayerToBoss * m_approachStandOf…から求めた空間情報を位置または向きの計算に使います。
-        const FVector desired = _context.PredictedPlayerLocation + fromPlayerToBoss * m_approachStandOffDistance;
-        return MoveToTacticalLocation(desired, 75.f);
+        //到着判定の余白を含めてもパンチが届く位置まで接近する
+        const float bodyRadius = _boss->GetCapsuleComponent()->GetScaledCapsuleRadius() + _player->GetCapsuleComponent()->GetScaledCapsuleRadius();
+        const float standOff = bodyRadius + FMath::Min(m_approachStandOffDistance, _boss->GetContactAttackRange() * 0.45f);
+        const FVector lead = (_context.m_predictedPlayerLocation - playerLocation).GetClampedToMaxSize2D(100.0f);
+        const FVector desired = playerLocation + lead + fromPlayerToBoss * standOff;
+        return MoveToTacticalLocation(desired, 25.f);
     }
     //戦術行動が回避の場合、プレイヤーから離れる
     case EBossTacticalAction::CircleLeft:
     case EBossTacticalAction::CircleRight:
     {
-        //sideは、_action == EBossTacticalAction::CircleRight ? 1.f : -1.fから算出した数値を後続の判定または計算に使います。
         const float side = _action == EBossTacticalAction::CircleRight ? 1.f : -1.f;
-        //desiredは、playerLocation + fromPlayerToBoss * m_circleRadius + Tangent * side * m…から求めた空間情報を位置または向きの計算に使います。
         const FVector desired = playerLocation + fromPlayerToBoss * m_circleRadius + Tangent * side * m_circleSideOffset;
         return MoveToTacticalLocation(desired, 60.f);
     }
     //後退行動を実行
     case EBossTacticalAction::Retreat:
     {
-        //desiredは、bossLocation + fromPlayerToBoss * m_bossRetreatDistance + Tangent * FMa…から求めた空間情報を位置または向きの計算に使います。
         const FVector desired = bossLocation + fromPlayerToBoss * m_bossRetreatDistance + Tangent * FMath::FRandRange(-160.f, 160.f);
         return MoveToTacticalLocation(desired, 65.f);
     }
     //戦術行動がライトコンボの場合、特定の攻撃を要求
     case EBossTacticalAction::LightCombo:
     {
-        return _boss->RequestSpecificAttack(EBossAttackPattern::LightCombo, _context.PredictedPlayerLocation);
+        return _boss->RequestSpecificAttack(EBossAttackPattern::LightCombo, _context.m_predictedPlayerLocation);
     }
     //戦術行動がヘビーコンボの場合、特定の攻撃を要求
     case EBossTacticalAction::PowerSlam:
     {
-        return _boss->RequestSpecificAttack(EBossAttackPattern::PowerSlam, _context.PredictedPlayerLocation);
+        return _boss->RequestSpecificAttack(EBossAttackPattern::PowerSlam, _context.m_predictedPlayerLocation);
     }
     //戦術行動がチャージラッシュの場合、特定の攻撃を要求
     case EBossTacticalAction::ChargeRush:
     {
-        return _boss->RequestSpecificAttack(EBossAttackPattern::ChargeRush, _context.PredictedPlayerLocation);
+        return _boss->RequestSpecificAttack(EBossAttackPattern::ChargeRush, _context.m_predictedPlayerLocation);
     }
     //戦術行動がバックステップの場合、特定の攻撃を要求
     case EBossTacticalAction::BackStep:
     {
-        return _boss->RequestSpecificAttack(EBossAttackPattern::BackStep, _context.PredictedPlayerLocation);
+        return _boss->RequestSpecificAttack(EBossAttackPattern::BackStep, _context.m_predictedPlayerLocation);
     }
     default: return false;
     }

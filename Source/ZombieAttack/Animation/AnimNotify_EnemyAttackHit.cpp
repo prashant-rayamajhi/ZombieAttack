@@ -13,7 +13,6 @@ void UAnimNotify_EnemyAttackHit::Notify(USkeletalMeshComponent* _meshComp, UAnim
 
     //メッシュコンポーネントの所有者をAEnemyChara型にキャスト
     AEnemyChara* enemy = Cast<AEnemyChara>(_meshComp->GetOwner());
-    //「!enemy」が成立するとき、PerformAttackHitを呼び出します。
     if (!enemy) { return; }
 
     //敵の攻撃ヒット処理を実行

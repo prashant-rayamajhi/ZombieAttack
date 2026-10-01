@@ -17,15 +17,11 @@ class UUserWidget;
 struct FIntroHUDRevealEntry
 {
     //Widgetをゲーム処理から参照できるように管理します。
-    TWeakObjectPtr<UUserWidget> Widget;
+    TWeakObjectPtr<UUserWidget> m_widget;
     //Delayを秒単位で指定します。
-    float Delay = 0.0f;
+    float m_delay = 0.0f;
     //Elapsedをゲーム処理から参照できるように管理します。
-    float Elapsed = 0.0f;
-    //StartOffsetは、FVector2D(-140.0f, 0.0f)から求めた空間情報を位置または向きの計算に使います。
-    FVector2D StartOffset = FVector2D(-140.0f, 0.0f);
-    //RestingOffsetをゲーム処理から参照できるように管理します。
-    FVector2D RestingOffset = FVector2D::ZeroVector;
+    float m_elapsed = 0.0f;
 };
 
 //AIntroカットシーンDirectorの動作をまとめたクラス

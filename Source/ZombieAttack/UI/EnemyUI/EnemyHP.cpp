@@ -6,7 +6,6 @@
 //体力UIを最新のゲーム状態へ更新します。
 void UEnemyHP::UpdateHealthUI()
 {
-    //「!m_owner.IsValid() || !m_healthBar」が成立するとき、GetMaxHPを呼び出します。
     if (!m_owner.IsValid() || !m_healthBar) { return; }
 
     //最大体力を返します。
@@ -14,17 +13,14 @@ void UEnemyHP::UpdateHealthUI()
     //体力を返します。
     const float CurrentHP = m_owner->GetHP();
     m_healthBar->SetPercent(MaxHP > 0.f ? CurrentHP / MaxHP : 0.f);
-
-    //「m_currentHealth」が成立するとき、SetTextを呼び出します。
     if (m_currentHealth)
     {
         m_currentHealth->SetText(FText::AsNumber(FMath::RoundToInt(CurrentHP)));
     }
-    //「m_maxHealth」が成立するとき、SetTextを呼び出します。
     if (m_maxHealth)
     {
         m_maxHealth->SetText(FText::AsNumber(FMath::RoundToInt(MaxHP)));
     }
 }
 //所有者を設定します。
-void UEnemyHP::SetOwner(AEnemyChara* Enemy) { m_owner = Enemy; }
+void UEnemyHP::SetOwner(AEnemyChara* _pEnemy) { m_owner = _pEnemy; }

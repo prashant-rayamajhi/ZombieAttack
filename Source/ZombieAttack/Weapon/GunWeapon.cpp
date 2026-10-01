@@ -1,4 +1,5 @@
 #include "GunWeapon.h"
+#include "WeaponAimTrace.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
@@ -25,12 +26,12 @@ AGunWeapon::AGunWeapon()
 //弾を発射する関数です。
 void AGunWeapon::UseWeapon()
 {
+    if (!CanFireNow()) { return; }
     //リロード中、または弾切れの場合は銃側だけで勝手にReloadしません。
     //プレイヤー操作の場合は PlayerChara::Attack() が ReloadWeapon() を呼び、
     //リロードMontageと状態フラグを正しく動かします。
     if (m_bIsReloading || m_currentClipAmmo <= 0)
     {
-        //「m_pEmptySound && m_currentClipAmmo <= 0 && m_currentTotalAmmo <= 0」が成立するとき、PlaySoundAtLocationを呼び出します。
         if (m_pEmptySound && m_currentClipAmmo <= 0 && m_currentTotalAmmo <= 0)
         {
             UGameplayStatics::PlaySoundAtLocation(this, m_pEmptySound, GetActorLocation());
@@ -52,95 +53,90 @@ void AGunWeapon::UseWeapon()
 
     //コントローラーを返します。
     AController* ownerController = ownerCharacter->GetController();
-    //「!IsValid(ownerController)」が成立するとき、続けて「!m_pWeapon」を判定します。
     if (!IsValid(ownerController)) { return; }
 
     if (!m_pWeapon)
     {
         return;
     }
-
-    //cameraStartは、直後の初期化結果を、同じスコープ内でこの名前を参照する計算や関数呼び出しへ渡すために使います。
     FVector cameraStart;
-    //cameraEndは、直後の初期化結果を、同じスコープ内でこの名前を参照する計算や関数呼び出しへ渡すために使います。
     FVector cameraEnd;
-    //targetPointは、位置と向きの計算結果を移動、照準、または描画位置へ反映するために使います。
     FVector targetPoint;
-    //aimHitResultは、衝突判定の結果を受け取り、命中位置や対象を参照するために使います。
     FHitResult aimHitResult;
 
-    //カメラ中央からTraceします。
-    //先にPawn専用Traceを見るため、近距離の敵もクロスヘア通りに拾いやすくなります。
+    //画面中央の最も手前の物体を、銃口が狙う位置として取得する。
     if (!GetCameraAimTarget(cameraStart, cameraEnd, targetPoint, aimHitResult)) { return; }
 
     //カメラ方向を保持します。
     const FVector cameraDirection = (cameraEnd - cameraStart).GetSafeNormal();
 
-    //カメラレイで命中したActorにダメージを確定させます。
-    //これにより、近距離で銃口位置のズレにより弾が外れる問題を避けます。
-    const bool bCameraRayDamageApplied = m_bUseCameraRayDamage && aimHitResult.bBlockingHit && IsValid(aimHitResult.GetActor()) &&
-                                         aimHitResult.GetActor() != ownerCharacter && aimHitResult.GetActor() != this;
-
-    //「bCameraRayDamageApplied」が成立するとき、ApplyCameraRayDamageを呼び出します。
-    if (bCameraRayDamageApplied)
+    //画面中央は狙いを決めるだけに使い、実際の命中は銃口から通る射線で決める。
+    const FVector muzzleLocation = m_pWeapon->GetSocketLocation(TEXT("MuzzleFlashSocket"));
+    //照準点が銃口より後ろにある場合、弾を自分の方へ折り返さない。
+    if (FVector::DotProduct(targetPoint - muzzleLocation, cameraDirection) <= 0.0f)
     {
-        ApplyCameraRayDamage(aimHitResult, cameraDirection, ownerController);
-        SpawnCameraRayImpactEffect(aimHitResult);
+        targetPoint = muzzleLocation + cameraDirection * m_range;
     }
-
-    //muzzleSocketNameは、TEXT("MuzzleFlashSocket")から構築した結果を後続の処理へ渡すために使います。
-    const FName muzzleSocketName = TEXT("MuzzleFlashSocket");
-    //muzzleLocationは、m_pWeapon->GetSocketLocation(muzzleSocketName)から求めた空間情報を位置または向きの計算に使います。
-    FVector muzzleLocation = m_pWeapon->GetSocketLocation(muzzleSocketName);
-
-    //finalDirectionは、(targetPoint - muzzleLocation).GetSafeNormal()から求めた空間情報を位置または向きの計算に使います。
     FVector finalDirection = (targetPoint - muzzleLocation).GetSafeNormal();
-    //「finalDirection.IsNearlyZero()」が成立するとき、finalDirectionを更新します。
-    if (finalDirection.IsNearlyZero())
+    if (finalDirection.IsNearlyZero()) { finalDirection = cameraDirection; }
+    FHitResult shotHit;
+    //銃身が壁へめり込んだ場合も、体から銃口までの遮蔽物で発砲を止める。
+    const FVector shoulder = ownerCharacter->GetActorLocation() + FVector(0, 0, 40);
+    const bool barrelBlocked = WeaponAimTrace::FindFirstHit(GetWorld(), shoulder, muzzleLocation, ownerCharacter, this, shotHit);
+    bool blocked = barrelBlocked;
+    if (!blocked)
     {
-        finalDirection = cameraDirection;
+        blocked = WeaponAimTrace::FindFirstHit(GetWorld(), muzzleLocation, targetPoint + finalDirection * 2.0f,
+            ownerCharacter, this, shotHit);
     }
-
-    muzzleLocation += finalDirection * 10.0f;
-    //bulletRotationは、finalDirection.Rotation()の成立可否を後続の分岐で判定するために使います。
+    const bool rayDamage = (m_bUseCameraRayDamage || barrelBlocked) && blocked;
+    if (rayDamage)
+    {
+        ApplyShotDamage(shotHit, finalDirection, ownerController);
+        SpawnShotImpactEffect(shotHit);
+    }
     const FRotator bulletRotation = finalDirection.Rotation();
-
-    //spawnParamsは、Actor生成時の所有者や衝突時の生成規則を指定するために使います。
     FActorSpawnParameters spawnParams;
     spawnParams.Owner = this;
     spawnParams.Instigator = ownerCharacter;
     spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-    //spawnedBulletは、GetWorld()->SpawnActor<ABullet>(m_bulletClass, muzzleLocation, bulletRo…から取得した参照を後続の呼び出しで使います。
-    ABullet* spawnedBullet = GetWorld()->SpawnActor<ABullet>(m_bulletClass, muzzleLocation, bulletRotation, spawnParams);
-
-    //「IsValid(spawnedBullet)」が成立するとき、SetMoveDirectionを呼び出します。
+    //銃口が壁の向こうへ突き抜けたときは、その先に見た目の弾も生成しない。
+    ABullet* spawnedBullet = barrelBlocked ? nullptr : GetWorld()->SpawnActor<ABullet>(m_bulletClass, muzzleLocation, bulletRotation, spawnParams);
     if (IsValid(spawnedBullet))
     {
         spawnedBullet->SetMoveDirection(finalDirection);
         spawnedBullet->IgnoreActor(ownerCharacter);
         spawnedBullet->IgnoreActor(this);
-
-        //「bCameraRayDamageApplied」が成立するとき、SetDamageEnabledを呼び出します。
-        if (bCameraRayDamageApplied)
+        if (m_bUseCameraRayDamage || barrelBlocked)
         {
-            //ダメージはGunWeapon側でカメラレイにより確定済みです。
-            //Bullet側では二重ダメージと二重ImpactEffectを防ぎます。
+            //銃口からの射線で判定済みなので、見た目の弾から二重にダメージを与えない。
             spawnedBullet->SetDamageEnabled(false);
+            //即時命中に対して弾だけが遅れて見えないよう、曳光の速度を実弾に近づける。
+            auto* movement = spawnedBullet->FindComponentByClass<UProjectileMovementComponent>();
+            if (movement)
+            {
+                movement->InitialSpeed = FMath::Max(60000.0f, movement->InitialSpeed);
+                movement->MaxSpeed = FMath::Max(movement->MaxSpeed, movement->InitialSpeed);
+                spawnedBullet->SetMoveDirection(finalDirection);
+            }
+            if (blocked)
+            {
+                const float speed = movement ? movement->InitialSpeed : 60000.0f;
+                spawnedBullet->SetLifeSpan(FMath::Max(0.01f, FVector::Distance(muzzleLocation, shotHit.ImpactPoint) / FMath::Max(speed, 1.0f)));
+            }
             spawnedBullet->SetImpactEffect(nullptr, m_impactEffectLifetime);
         }
         else
         {
-            //何もカメラレイに当たらなかった場合は、従来通り弾ActorのHitで処理します。
+            //実体弾を選んだ武器では、飛翔後の衝突にダメージ判定を任せる。
             spawnedBullet->SetDamageEnabled(true);
             spawnedBullet->SetImpactEffect(m_impactEffect, m_impactEffectLifetime);
         }
     }
 
     --m_currentClipAmmo;
-    OnReloadFinished.Broadcast();
-
-    //「m_pFireSound」が成立するとき、PlaySoundAtLocationを呼び出します。
+    m_nextShotTime = GetWorld()->GetTimeSeconds() + GetFireRate();
+    m_onReloadFinished.Broadcast();
     if (m_pFireSound)
     {
         UGameplayStatics::PlaySoundAtLocation(this, m_pFireSound, muzzleLocation);
@@ -154,7 +150,13 @@ void AGunWeapon::UseWeapon()
 
 }
 
-//カメラの視線からターゲットポイントを取得する関数です。
+//リロード演出や入力回数に関係なく、武器で決めた発射間隔を守る。
+bool AGunWeapon::CanFireNow() const
+{
+    return GetWorld() && GetWorld()->GetTimeSeconds() + 0.001 >= m_nextShotTime;
+}
+
+//画面中央で最初に遮られる点を求め、銃口から狙う位置として使う。
 bool AGunWeapon::GetCameraAimTarget(FVector& _outCameraStart, FVector& _outCameraEnd, FVector& _outTargetPoint, FHitResult& _outHitResult) const
 {
     _outCameraStart = FVector::ZeroVector;
@@ -164,17 +166,14 @@ bool AGunWeapon::GetCameraAimTarget(FVector& _outCameraStart, FVector& _outCamer
 
     //ワールドを返します。
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!world) { return false; }
 
     //所有者キャラクターを保持します。
     ACharacter* ownerCharacter = Cast<ACharacter>(m_pOwnerChara);
-    //「!IsValid(ownerCharacter)」が成立するとき、GetControllerを呼び出します。
     if (!IsValid(ownerCharacter)) { return false; }
 
     //コントローラーを返します。
     AController* ownerController = ownerCharacter->GetController();
-    //「!IsValid(ownerController)」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!IsValid(ownerController)) { return false; }
 
     //カメラ位置を保持します。
@@ -182,64 +181,14 @@ bool AGunWeapon::GetCameraAimTarget(FVector& _outCameraStart, FVector& _outCamer
     //カメラ回転を保持します。
     FRotator cameraRotation;
     ownerController->GetPlayerViewPoint(cameraLocation, cameraRotation);
-
-    //cameraForwardは、cameraRotation.Vector()から求めた空間情報を位置または向きの計算に使います。
     const FVector cameraForward = cameraRotation.Vector();
     _outCameraStart = cameraLocation;
     _outCameraEnd = cameraLocation + cameraForward * m_range;
 
-    //queryParamsは、queryParamsの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
-    FCollisionQueryParams queryParams(SCENE_QUERY_STAT(PlayerAimTrace), true);
-    queryParams.AddIgnoredActor(ownerCharacter);
-    queryParams.AddIgnoredActor(this);
-    queryParams.bTraceComplex = true;
-
-    //まずPawnをObjectQueryで拾います。
-    //敵のVisibility設定がIgnoreでも、Pawnとして存在していれば命中点を取りやすくします。
-    if (m_pawnAimTraceSphereRadius > 0.0f)
+    //照準補助の太い球で敵を優先せず、中央の細い射線に最初に当たる場所を狙う。
+    if (WeaponAimTrace::FindFirstHit(world, _outCameraStart, _outCameraEnd, ownerCharacter, const_cast<AGunWeapon*>(this), _outHitResult))
     {
-        //pawnObjectParamsは、トレースや関数呼び出しへ渡す検索条件を設定するために使います。
-        FCollisionObjectQueryParams pawnObjectParams;
-        pawnObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-
-        //pawnHitResultは、衝突判定の結果を受け取り、命中位置や対象を参照するために使います。
-        FHitResult pawnHitResult;
-        //射線がPawnへ命中したかを示します。
-        const bool bPawnHit = world->SweepSingleByObjectType(pawnHitResult, _outCameraStart, _outCameraEnd, FQuat::Identity, pawnObjectParams,
-                                                             FCollisionShape::MakeSphere(m_pawnAimTraceSphereRadius), queryParams);
-
-        //「bPawnHit && IsValid(pawnHitResult.GetActor())」が成立するとき、_outHitResultを更新します。
-        if (bPawnHit && IsValid(pawnHitResult.GetActor()))
-        {
-            _outHitResult = pawnHitResult;
-            _outTargetPoint = pawnHitResult.ImpactPoint;
-            //呼び出し元へ成功を返し、この関数でこれ以上の処理を行わないようにします。
-            return true;
-        }
-    }
-
-    //Traceが衝突対象を検出したかを示します。
-    bool bHit = false;
-    //visibilityHitResultは、衝突判定の結果を受け取り、命中位置や対象を参照するために使います。
-    FHitResult visibilityHitResult;
-
-    //「m_aimTraceSphereRadius > 0.0f」が成立するとき、SweepSingleByChannelを呼び出します。
-    if (m_aimTraceSphereRadius > 0.0f)
-    {
-        bHit = world->SweepSingleByChannel(visibilityHitResult, _outCameraStart, _outCameraEnd, FQuat::Identity, ECC_Visibility,
-                                           FCollisionShape::MakeSphere(m_aimTraceSphereRadius), queryParams);
-    }
-    else
-    {
-        bHit = world->LineTraceSingleByChannel(visibilityHitResult, _outCameraStart, _outCameraEnd, ECC_Visibility, queryParams);
-    }
-
-    //「bHit」が成立するとき、_outHitResultを更新します。
-    if (bHit)
-    {
-        _outHitResult = visibilityHitResult;
-        _outTargetPoint = visibilityHitResult.ImpactPoint;
-        //呼び出し元へ成功を返し、この関数でこれ以上の処理を行わないようにします。
+        _outTargetPoint = _outHitResult.ImpactPoint;
         return true;
     }
 
@@ -248,12 +197,10 @@ bool AGunWeapon::GetCameraAimTarget(FVector& _outCameraStart, FVector& _outCamer
     return true;
 }
 
-//カメラRayダメージを対象へ適用します。
-void AGunWeapon::ApplyCameraRayDamage(const FHitResult& _hitResult, const FVector& _damageDirection, AController* _ownerController)
+//銃口から最初に当たった対象へ命中演出とダメージを一度だけ渡す。
+void AGunWeapon::ApplyShotDamage(const FHitResult& _hitResult, const FVector& _damageDirection, AController* _ownerController)
 {
-    //hitActorは、_hitResult.GetActor()から取得した参照を後続の呼び出しで使います。
     AActor* hitActor = _hitResult.GetActor();
-    //「!IsValid(hitActor)」が成立するとき、続けて「AEnemyChara* hitEnemy = Cast<AEnemyChara>(hitActor)」を判定します。
     if (!IsValid(hitActor)) { return; }
 
     //生物への命中表現は敵側の共通コンポーネントへ任せる
@@ -262,21 +209,18 @@ void AGunWeapon::ApplyCameraRayDamage(const FHitResult& _hitResult, const FVecto
         hitEnemy->PlayBulletImpactFeedback(_hitResult, _damageDirection);
     }
 
-    UGameplayStatics::ApplyPointDamage(hitActor, m_Damage, _damageDirection, _hitResult, _ownerController, this, UDamageType::StaticClass());
+    UGameplayStatics::ApplyPointDamage(hitActor, m_damage, _damageDirection, _hitResult, _ownerController, this, UDamageType::StaticClass());
 }
 
-//カメラRayImpactエフェクトを作成します。
-void AGunWeapon::SpawnCameraRayImpactEffect(const FHitResult& _hitResult)
+//壁や地面へ着弾した場所に、武器ごとの命中エフェクトを出す。
+void AGunWeapon::SpawnShotImpactEffect(const FHitResult& _hitResult)
 {
     //敵へ命中した場合は血液演出が再生されるため、汎用Impactを重ねない
     if (Cast<AEnemyChara>(_hitResult.GetActor())) { return; }
-
-    //「!m_impactEffect」が成立するとき、GetWorldを呼び出します。
     if (!m_impactEffect) { return; }
 
     //ワールドを返します。
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!world) { return; }
 
     UNiagaraComponent* impactComponent =
@@ -290,7 +234,6 @@ void AGunWeapon::SpawnCameraRayImpactEffect(const FHitResult& _hitResult)
 //MuzzleFlashを生成する関数です。
 void AGunWeapon::SpawnMuzzleFlash(const FVector& _location, const FRotator& _rotation)
 {
-    //「!m_muzzleFlash」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!m_muzzleFlash) { return; }
 
     UNiagaraComponent* flashComponent =
@@ -305,34 +248,25 @@ void AGunWeapon::SpawnMuzzleFlash(const FVector& _location, const FRotator& _rot
 //NiagaraAfterDelayを解除します。
 void AGunWeapon::DestroyNiagaraAfterDelay(UNiagaraComponent* _component, float _delaySeconds) const
 {
-    //「!IsValid(_component)」が成立するとき、GetWorldを呼び出します。
     if (!IsValid(_component)) { return; }
 
     //ワールドを返します。
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、Deactivateを呼び出します。
     if (!world)
     {
         _component->Deactivate();
         _component->DestroyComponent();
         return;
     }
-
-    //weakComponentは、_componentから取得した参照を後続の呼び出しで使います。
     TWeakObjectPtr<UNiagaraComponent> weakComponent = _component;
-    //timerHandleは、タイマーの登録と解除を同じハンドルで管理するために使います。
     FTimerHandle timerHandle;
 
     world->GetTimerManager().SetTimer(timerHandle,
                                       FTimerDelegate::CreateLambda(
                                           [weakComponent]()
                                           {
-                                              //「!weakComponent.IsValid()」が成立するとき、Getを呼び出します。
                                               if (!weakComponent.IsValid()) { return; }
-
-                                              //componentは、weakComponent.Get()から取得した参照を後続の呼び出しで使います。
                                               UNiagaraComponent* component = weakComponent.Get();
-                                              //「!IsValid(component)」が成立するとき、Deactivateを呼び出します。
                                               if (!IsValid(component)) { return; }
 
                                               component->Deactivate();
@@ -344,7 +278,6 @@ void AGunWeapon::DestroyNiagaraAfterDelay(UNiagaraComponent* _component, float _
 //リロード処理です。
 void AGunWeapon::Reload()
 {
-    //「m_bIsReloading || m_currentClipAmmo == m_maxClipAmmo || m_currentTotalAmmo <= 0」が成立するとき、m_bIsReloadingを更新します。
     if (m_bIsReloading || m_currentClipAmmo == m_maxClipAmmo || m_currentTotalAmmo <= 0) { return; }
 
     m_bIsReloading = true;
@@ -353,37 +286,29 @@ void AGunWeapon::Reload()
 //リロード完了処理です。
 void AGunWeapon::FinishReload()
 {
-    //「!m_bIsReloading」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!m_bIsReloading) { return; }
-
-    //neededAmmoは、m_maxClipAmmo - m_currentClipAmmoから算出した数値を後続の判定または計算に使います。
     const int32 neededAmmo = m_maxClipAmmo - m_currentClipAmmo;
-    //ammoToReloadは、FMath::Min(neededAmmo, m_currentTotalAmmo)から算出した数値を後続の判定または計算に使います。
     const int32 ammoToReload = FMath::Min(neededAmmo, m_currentTotalAmmo);
 
     m_currentClipAmmo += ammoToReload;
     m_currentTotalAmmo -= ammoToReload;
     m_bIsReloading = false;
 
-    OnReloadFinished.Broadcast();
+    m_onReloadFinished.Broadcast();
 }
 
 //予備弾を追加します。
 void AGunWeapon::AddAmmo(float _amount)
 {
-    //amountToAddは、FMath::RoundToInt(_amount)から算出した数値を後続の判定または計算に使います。
     const int32 amountToAdd = FMath::RoundToInt(_amount);
     m_currentTotalAmmo = FMath::Clamp(m_currentTotalAmmo + amountToAdd, 0, m_totalMaxAmmo);
-    OnReloadFinished.Broadcast();
+    m_onReloadFinished.Broadcast();
 }
 
 //リロード可能かどうかを返します。
 bool AGunWeapon::CanReload() const
 {
-    //「m_currentClipAmmo >= m_maxClipAmmo」が成立するとき、続けて「m_currentTotalAmmo <= 0」を判定します。
     if (m_currentClipAmmo >= m_maxClipAmmo) { return false; }
-
-    //「m_currentTotalAmmo <= 0」が成立するとき、この関数を終了します。
     if (m_currentTotalAmmo <= 0) { return false; }
 
     //呼び出し元へ成功を返し、この関数でこれ以上の処理を行わないようにします。

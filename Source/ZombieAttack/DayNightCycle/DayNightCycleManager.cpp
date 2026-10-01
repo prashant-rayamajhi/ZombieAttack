@@ -47,8 +47,6 @@ void ADayNightCycleManager::BeginPlay()
             break;
         }
     }
-
-    //「m_pSkyLightActor && m_pSkyLightActor->GetLightComponent()」が成立するとき、GetLightComponentを呼び出します。
     if (m_pSkyLightActor && m_pSkyLightActor->GetLightComponent())
     {
         m_pSkyLightActor->GetLightComponent()->SetMobility(EComponentMobility::Movable);
@@ -68,7 +66,6 @@ void ADayNightCycleManager::ApplyGameplayPostProcess()
     //重なっているVolumeも含めて露出を統一し、優先度による明るさの急変を防ぎます。
     for (TActorIterator<APostProcessVolume> It(GetWorld()); It; ++It)
     {
-        //PostProcessVolumeは、*Itから取得した参照を後続の呼び出しで使います。
         APostProcessVolume* PostProcessVolume = *It;
         //削除待ちのVolumeには描画設定を適用しません。
         if (!IsValid(PostProcessVolume))
@@ -83,15 +80,15 @@ void ADayNightCycleManager::ApplyGameplayPostProcess()
 }
 
 //毎フレームの更新を行います。
-void ADayNightCycleManager::Tick(float DeltaTime)
+void ADayNightCycleManager::Tick(float _deltaTime)
 {
     //フレームごとの経過時間を使って、移動や表示の変化を更新します。
-    Super::Tick(DeltaTime);
+    Super::Tick(_deltaTime);
 
     //無効な周期では除算を行わず、現在の照明を維持します。
     if (m_dayLength <= 0.f) { return; }
 
-    m_timeOfDay += DeltaTime / m_dayLength;
+    m_timeOfDay += _deltaTime / m_dayLength;
     //一日の終端を越えた時刻を先頭へ戻します。
     if (m_timeOfDay > 1.f)
     {
@@ -101,7 +98,7 @@ void ADayNightCycleManager::Tick(float DeltaTime)
     UpdateSunLight();
 
     //空の再キャプチャは毎フレーム行わず、指定間隔まで時間を蓄積します。
-    m_skyRecaptureTimer += DeltaTime;
+    m_skyRecaptureTimer += _deltaTime;
     //空の色が十分変化したタイミングだけSkyLightを更新します。
     if (m_skyRecaptureTimer >= m_skyRecaptureInterval)
     {

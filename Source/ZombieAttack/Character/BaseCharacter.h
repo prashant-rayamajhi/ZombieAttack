@@ -34,12 +34,12 @@ class ZOMBIEATTACK_API ABaseCharacter : public ACharacter
 
     //ダメージ
     UPROPERTY(BlueprintAssignable, Category = "Health")
-    FOnDamaged OnDamaged;
+    FOnDamaged m_onDamaged;
 
-    //OnCharacterDiedをゲーム処理から参照できるように管理します。
+    //m_onCharacterDiedをゲーム処理から参照できるように管理します。
     UPROPERTY(BlueprintAssignable, Category = "Health")
-    //OnCharacterDiedをゲーム処理から参照できるように管理します。
-    FOnDied OnCharacterDied;
+    //m_onCharacterDiedをゲーム処理から参照できるように管理します。
+    FOnDied m_onCharacterDied;
 
   protected:
     //開始時の処理
@@ -61,15 +61,15 @@ class ZOMBIEATTACK_API ABaseCharacter : public ACharacter
 
     //最大HPを設定するプロパティ
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HP", meta = (ClampMin = "1.0"))
-    float m_MaxHp;
+    float m_maxHp;
 
     //現在のHPを保持するプロパティ
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HP")
-    float m_Hp;
+    float m_hp;
 
     //ダメージ量を設定するプロパティ
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage", meta = (ClampMin = "0.0"))
-    float m_Damage;
+    float m_damage;
 
   private:
     //死亡イベントがすでにブロードキャストされたかどうかを追跡するフラグ

@@ -42,7 +42,6 @@ class ZOMBIEATTACK_API UPlayerRifleAnimationComponent : public UActorComponent
 
     //エイム状態を返します。
     ERifleAimState GetAimState() const { return m_aimState; }
-    //IsAimReadyPoseActiveは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool IsAimReadyPoseActive() const;
     FOnRifleAimReady& OnAimReady() { return m_onAimReady; }
 
@@ -88,7 +87,7 @@ class ZOMBIEATTACK_API UPlayerRifleAnimationComponent : public UActorComponent
     //UseUnifiedAimingPoseかを示します。
     UPROPERTY(EditDefaultsOnly, Category = "Animation|Rifle")
     //AR装備中をAiming Idleへ統一するか
-    bool b_mUseUnifiedAimingPose;
+    bool m_bUseUnifiedAimingPose;
 
     //raisePlayRateをゲーム処理から参照できるように管理します。
     UPROPERTY(EditDefaultsOnly, Category = "Animation|Rifle", meta = (ClampMin = "0.1"))

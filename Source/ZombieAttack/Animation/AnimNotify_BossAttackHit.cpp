@@ -13,7 +13,6 @@ void UAnimNotify_BossAttackHit::Notify(USkeletalMeshComponent* _meshComp, UAnimS
 
     //メッシュコンポーネントの所有者をABossChara型にキャスト
     ABossChara* boss = Cast<ABossChara>(_meshComp->GetOwner());
-    //「!boss」が成立するとき、PerformBossAttackHitを呼び出します。
     if (!boss) { return; }
 
     //ボスの攻撃ヒット処理を実行

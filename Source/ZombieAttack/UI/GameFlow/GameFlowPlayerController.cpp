@@ -1,4 +1,6 @@
 #include "GameFlowPlayerController.h"
+#include "GameFlowScene.h"
+#include "EngineUtils.h"
 
 #include "GameFlowScreenWidget.h"
 #include "../Configuration/ZombieAttackUISettings.h"
@@ -19,7 +21,8 @@ void AGameFlowPlayerController::BeginPlay()
 //GameFlow画面が利用できる状態を保証します。
 void AGameFlowPlayerController::EnsureGameFlowScreen()
 {
-    //existingWidgetsは、UI部品を構築または更新する呼び出しで参照するために使います。
+    //専用カメラへ切り替え、UIの背後に本編と同じ森を映す。
+    for (TActorIterator<AGameFlowScene> scene(GetWorld()); scene; ++scene) { SetViewTarget(*scene); break; }
     TArray<UUserWidget*> existingWidgets;
     UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, existingWidgets, UGameFlowScreenWidget::StaticClass(), true);
 
@@ -31,8 +34,6 @@ void AGameFlowPlayerController::EnsureGameFlowScreen()
     {
         return;
     }
-
-    //「!screenWidget->IsInViewport()」が成立するとき、AddToViewportを呼び出します。
     if (!screenWidget->IsInViewport())
     {
         screenWidget->AddToViewport(100);

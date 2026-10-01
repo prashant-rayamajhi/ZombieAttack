@@ -41,6 +41,8 @@ class ZOMBIEATTACK_API AGunWeapon : public AWeaponBase
 
     //現在の弾薬を返します。
     int32 GetCurrentAmmo() const { return m_currentClipAmmo; }
+    //武器の発射間隔が過ぎたかを、プレイヤーの入力予約と銃の両方で確認する。
+    bool CanFireNow() const;
     int32 GetTotalAmmo() const { return m_currentTotalAmmo; }
     int32 GetMaxClipAmmo() const { return m_maxClipAmmo; }
     int32 GetTotalMaxAmmo() const { return m_totalMaxAmmo; }
@@ -55,10 +57,10 @@ class ZOMBIEATTACK_API AGunWeapon : public AWeaponBase
     bool CanReload() const;
 
   public:
-    //OnReloadFinishedをゲーム処理から参照できるように管理します。
+    //m_onReloadFinishedをゲーム処理から参照できるように管理します。
     UPROPERTY(BlueprintAssignable, Category = "Weapon|Ammo")
-    //OnReloadFinishedをゲーム処理から参照できるように管理します。
-    FOnReloadFinished OnReloadFinished;
+    //m_onReloadFinishedをゲーム処理から参照できるように管理します。
+    FOnReloadFinished m_onReloadFinished;
 
   protected:
     //射程距離です。
@@ -77,8 +79,8 @@ class ZOMBIEATTACK_API AGunWeapon : public AWeaponBase
     UPROPERTY(EditAnywhere, Category = "Weapon|Aim", meta = (ClampMin = "0.0"))
     float m_pawnAimTraceSphereRadius;
 
-    //カメラレイで当たったActorに即時ダメージを入れるかどうかです。
-    UPROPERTY(EditAnywhere, Category = "Weapon|Aim")
+    //銃口の射線で即時命中させる設定。既存BPの設定を保つため保存名は変更しない。
+    UPROPERTY(EditAnywhere, Category = "Weapon|Aim", meta = (DisplayName = "Use Muzzle Hitscan"))
     bool m_bUseCameraRayDamage;
 
 
@@ -151,16 +153,18 @@ class ZOMBIEATTACK_API AGunWeapon : public AWeaponBase
     TObjectPtr<USoundBase> m_pReloadSound;
 
   private:
+    //連打や重複した通知で設定以上に発砲しないための次回発射時刻。
+    double m_nextShotTime = 0.0;
     //カメラエイム対象を返します。
     bool GetCameraAimTarget(FVector& _outCameraStart, FVector& _outCameraEnd, FVector& _outTargetPoint,
                             //constをゲーム処理から参照できるように管理します。
                             FHitResult& _outHitResult) const;
 
-    //ApplyCameraRayDamageは、引数の内容をゲーム中の状態または表示へ反映します。
-    void ApplyCameraRayDamage(const FHitResult& _hitResult, const FVector& _damageDirection, AController* _ownerController);
+    //銃口から最初に当たった対象へ命中演出とダメージを一度だけ渡す。
+    void ApplyShotDamage(const FHitResult& _hitResult, const FVector& _damageDirection, AController* _ownerController);
 
-    //カメラRayImpactエフェクトを作成します。
-    void SpawnCameraRayImpactEffect(const FHitResult& _hitResult);
+    //壁や地面へ着弾した場所に、武器ごとの命中エフェクトを出す。
+    void SpawnShotImpactEffect(const FHitResult& _hitResult);
 
 
     //MuzzleFlashを作成します。

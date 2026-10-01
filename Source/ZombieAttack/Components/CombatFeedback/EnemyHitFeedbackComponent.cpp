@@ -32,7 +32,6 @@ UEnemyHitFeedbackComponent::UEnemyHitFeedbackComponent()
 
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> bloodDecalMaterial(
         TEXT("/Game/VFX/Blood/Materials/M_BloodImpactDecal.M_BloodImpactDecal"));
-    //「bloodDecalMaterial.Succeeded()」が成立するとき、m_pBloodDecalMaterialを更新します。
     if (bloodDecalMaterial.Succeeded())
     {
         m_pBloodDecalMaterial = bloodDecalMaterial.Object;
@@ -40,7 +39,6 @@ UEnemyHitFeedbackComponent::UEnemyHitFeedbackComponent()
 
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> bloodDropletMaterial(
         TEXT("/Game/VFX/Blood/Materials/M_BloodDroplet.M_BloodDroplet"));
-    //「bloodDropletMaterial.Succeeded()」が成立するとき、m_pBloodDropletMaterialを更新します。
     if (bloodDropletMaterial.Succeeded())
     {
         m_pBloodDropletMaterial = bloodDropletMaterial.Object;
@@ -48,23 +46,16 @@ UEnemyHitFeedbackComponent::UEnemyHitFeedbackComponent()
 
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> bloodImpactSpriteMaterial(
         TEXT("/Game/VFX/Blood/Materials/M_BloodImpactSprite.M_BloodImpactSprite"));
-    //「bloodImpactSpriteMaterial.Succeeded()」が成立するとき、m_pBloodImpactSpriteMaterialを更新します。
     if (bloodImpactSpriteMaterial.Succeeded())
     {
         m_pBloodImpactSpriteMaterial = bloodImpactSpriteMaterial.Object;
     }
-
-    //dropletMeshは、dropletMeshの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UStaticMesh> dropletMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-    //「dropletMesh.Succeeded()」が成立するとき、m_pDropletMeshを更新します。
     if (dropletMesh.Succeeded())
     {
         m_pDropletMesh = dropletMesh.Object;
     }
-
-    //impactPlaneMeshは、impactPlaneMeshの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UStaticMesh> impactPlaneMesh(TEXT("/Engine/BasicShapes/Plane.Plane"));
-    //「impactPlaneMesh.Succeeded()」が成立するとき、m_pImpactPlaneMeshを更新します。
     if (impactPlaneMesh.Succeeded())
     {
         m_pImpactPlaneMesh = impactPlaneMesh.Object;
@@ -79,11 +70,8 @@ void UEnemyHitFeedbackComponent::TickComponent(float _deltaTime, ELevelTick _tic
     //「int32 i = m_activeBloodDroplets.Num() - 1; i >= 0; --i」で列挙される各要素へ、ループ本体の判定と更新を適用します。
     for (int32 i = m_activeBloodDroplets.Num() - 1; i >= 0; --i)
     {
-        //dropletは、m_activeBloodDroplets[i]から構築した結果を後続の処理へ渡すために使います。
         FActiveBloodDroplet& droplet = m_activeBloodDroplets[i];
-        //dropletComponentは、droplet.m_pComponent.Get()から取得した参照を後続の呼び出しで使います。
         UStaticMeshComponent* dropletComponent = droplet.m_pComponent.Get();
-        //「!IsValid(dropletComponent)」が成立するとき、RemoveAtSwapを呼び出します。
         if (!IsValid(dropletComponent))
         {
             m_activeBloodDroplets.RemoveAtSwap(i);
@@ -91,7 +79,6 @@ void UEnemyHitFeedbackComponent::TickComponent(float _deltaTime, ELevelTick _tic
         }
 
         droplet.m_remainingLife -= _deltaTime;
-        //「droplet.m_remainingLife <= 0.0f」が成立するとき、DestroyComponentを呼び出します。
         if (droplet.m_remainingLife <= 0.0f)
         {
             dropletComponent->DestroyComponent();
@@ -101,8 +88,6 @@ void UEnemyHitFeedbackComponent::TickComponent(float _deltaTime, ELevelTick _tic
 
         droplet.m_velocity.Z -= m_dropletGravity * _deltaTime;
         dropletComponent->AddWorldOffset(droplet.m_velocity * _deltaTime, false);
-
-        //lifeAlphaは、FMath::Clamp(droplet.m_remainingLife / droplet.m_totalLife, 0.0f, 1.0f)から算出した数値を後続の判定または計算に使います。
         const float lifeAlpha = FMath::Clamp(droplet.m_remainingLife / droplet.m_totalLife, 0.0f, 1.0f);
         dropletComponent->SetWorldScale3D(droplet.m_initialScale * lifeAlpha);
     }
@@ -110,11 +95,8 @@ void UEnemyHitFeedbackComponent::TickComponent(float _deltaTime, ELevelTick _tic
     //「int32 i = m_activeBloodSprites.Num() - 1; i >= 0; --i」で列挙される各要素へ、ループ本体の判定と更新を適用します。
     for (int32 i = m_activeBloodSprites.Num() - 1; i >= 0; --i)
     {
-        //spriteは、m_activeBloodSprites[i]から構築した結果を後続の処理へ渡すために使います。
         FActiveBloodSprite& sprite = m_activeBloodSprites[i];
-        //spriteComponentは、sprite.m_pComponent.Get()から取得した参照を後続の呼び出しで使います。
         UStaticMeshComponent* spriteComponent = sprite.m_pComponent.Get();
-        //「!IsValid(spriteComponent)」が成立するとき、RemoveAtSwapを呼び出します。
         if (!IsValid(spriteComponent))
         {
             m_activeBloodSprites.RemoveAtSwap(i);
@@ -122,15 +104,12 @@ void UEnemyHitFeedbackComponent::TickComponent(float _deltaTime, ELevelTick _tic
         }
 
         sprite.m_remainingLife -= _deltaTime;
-        //「sprite.m_remainingLife <= 0.0f」が成立するとき、DestroyComponentを呼び出します。
         if (sprite.m_remainingLife <= 0.0f)
         {
             spriteComponent->DestroyComponent();
             m_activeBloodSprites.RemoveAtSwap(i);
             continue;
         }
-
-        //elapsedAlphaは、FMath::Clamp(1.0f - sprite.m_remainingLife / sprite.m_totalLife, 0.0f, …から算出した数値を後続の判定または計算に使います。
         const float elapsedAlpha = FMath::Clamp(1.0f - sprite.m_remainingLife / sprite.m_totalLife, 0.0f, 1.0f);
         spriteComponent->SetWorldScale3D(sprite.m_initialScale *
                                          FMath::Lerp(BloodSpriteStartScaleMultiplier, BloodSpriteEndScaleMultiplier, elapsedAlpha));
@@ -140,7 +119,6 @@ void UEnemyHitFeedbackComponent::TickComponent(float _deltaTime, ELevelTick _tic
 //BulletImpactを再生します。
 void UEnemyHitFeedbackComponent::PlayBulletImpact(const FHitResult& _hitResult, const FVector& _shotDirection)
 {
-    //「!_hitResult.bBlockingHit」が成立するとき、SpawnBloodDecalを呼び出します。
     if (!_hitResult.bBlockingHit) { return; }
 
     SpawnBloodDecal(_hitResult);
@@ -155,17 +133,10 @@ void UEnemyHitFeedbackComponent::SpawnBloodImpactSprite(const FHitResult& _hitRe
     AActor* owner = GetOwner();
     //ワールドを返します。
     UWorld* world = GetWorld();
-    //「!IsValid(owner) || !world || !m_pImpactPlaneMesh || !m_pBloodImpactSpriteMaterial」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!IsValid(owner) || !world || !m_pImpactPlaneMesh || !m_pBloodImpactSpriteMaterial) { return; }
-
-    //spriteComponentは、NewObject<UStaticMeshComponent>(owner)から取得した参照を後続の呼び出しで使います。
     UStaticMeshComponent* spriteComponent = NewObject<UStaticMeshComponent>(owner);
-    //「!spriteComponent」が成立するとき、GetSafeNormalを呼び出します。
     if (!spriteComponent) { return; }
-
-    //facingDirectionは、-_shotDirection.GetSafeNormal()から求めた空間情報を位置または向きの計算に使います。
     FVector facingDirection = -_shotDirection.GetSafeNormal();
-    //「facingDirection.IsNearlyZero()」が成立するとき、facingDirectionを更新します。
     if (facingDirection.IsNearlyZero())
     {
         facingDirection = _hitResult.ImpactNormal;
@@ -179,8 +150,6 @@ void UEnemyHitFeedbackComponent::SpawnBloodImpactSprite(const FHitResult& _hitRe
     spriteComponent->SetWorldLocation(_hitResult.ImpactPoint + facingDirection * BloodSpriteSurfaceOffset);
     spriteComponent->SetWorldRotation(FRotationMatrix::MakeFromZ(facingDirection).Rotator());
     spriteComponent->SetWorldScale3D(FVector(m_impactSpriteScale));
-
-    //spriteは、m_activeBloodSprites.AddDefaulted_GetRef()から構築した結果を後続の処理へ渡すために使います。
     FActiveBloodSprite& sprite = m_activeBloodSprites.AddDefaulted_GetRef();
     sprite.m_pComponent = spriteComponent;
     sprite.m_initialScale = FVector(m_impactSpriteScale);
@@ -193,10 +162,7 @@ void UEnemyHitFeedbackComponent::SpawnBloodDecal(const FHitResult& _hitResult) c
 {
     //コンポーネントを返します。
     UPrimitiveComponent* hitComponent = _hitResult.GetComponent();
-    //「!m_pBloodDecalMaterial || !IsValid(hitComponent)」が成立するとき、Rotationを呼び出します。
     if (!m_pBloodDecalMaterial || !IsValid(hitComponent)) { return; }
-
-    //decalRotationは、_hitResult.ImpactNormal.Rotation()から求めた空間情報を位置または向きの計算に使います。
     FRotator decalRotation = _hitResult.ImpactNormal.Rotation();
     decalRotation.Roll = FMath::FRandRange(0.0f, 360.0f);
 
@@ -213,12 +179,8 @@ void UEnemyHitFeedbackComponent::SpawnBloodDroplets(const FHitResult& _hitResult
     AActor* owner = GetOwner();
     //ワールドを返します。
     UWorld* world = GetWorld();
-    //「!IsValid(owner) || !world || !m_pDropletMesh || !m_pBloodDropletMaterial」が成立するとき、GetSafeNormalを呼び出します。
     if (!IsValid(owner) || !world || !m_pDropletMesh || !m_pBloodDropletMaterial) { return; }
-
-    //sprayDirectionは、(_hitResult.ImpactNormal - _shotDirection.GetSafeNormal() * 0.35f).GetS…から求めた空間情報を位置または向きの計算に使います。
     FVector sprayDirection = (_hitResult.ImpactNormal - _shotDirection.GetSafeNormal() * 0.35f).GetSafeNormal();
-    //「sprayDirection.IsNearlyZero()」が成立するとき、sprayDirectionを更新します。
     if (sprayDirection.IsNearlyZero())
     {
         sprayDirection = _hitResult.ImpactNormal;
@@ -227,9 +189,7 @@ void UEnemyHitFeedbackComponent::SpawnBloodDroplets(const FHitResult& _hitResult
     //「int32 i = 0; i < m_dropletCount; ++i」で列挙される各要素へ、ループ本体の判定と更新を適用します。
     for (int32 i = 0; i < m_dropletCount; ++i)
     {
-        //dropletComponentは、NewObject<UStaticMeshComponent>(owner)から取得した参照を後続の呼び出しで使います。
         UStaticMeshComponent* dropletComponent = NewObject<UStaticMeshComponent>(owner);
-        //「!dropletComponent」が成立するとき、SetStaticMeshを呼び出します。
         if (!dropletComponent)
         {
             continue;
@@ -245,8 +205,6 @@ void UEnemyHitFeedbackComponent::SpawnBloodDroplets(const FHitResult& _hitResult
         //現在の状態に合わせた移動倍率を用意します。
         const float scale = FMath::FRandRange(BloodDropletMinScale, BloodDropletMaxScale);
         dropletComponent->SetWorldScale3D(FVector(scale));
-
-        //dropletは、m_activeBloodDroplets.AddDefaulted_GetRef()から構築した結果を後続の処理へ渡すために使います。
         FActiveBloodDroplet& droplet = m_activeBloodDroplets.AddDefaulted_GetRef();
         droplet.m_pComponent = dropletComponent;
         droplet.m_velocity = FMath::VRandCone(sprayDirection, FMath::DegreesToRadians(BloodDropletConeDegrees)) *

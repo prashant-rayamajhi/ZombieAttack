@@ -18,7 +18,6 @@
 //グローバル変数として、敵の残り数を表示するウィジェットを保持する
 namespace
 {
-//g_enemyCountWidgetは、UI部品を構築または更新する呼び出しで参照するために使います。
 TWeakObjectPtr<UEnemyCount> g_enemyCountWidget;
 }
 
@@ -42,10 +41,9 @@ void ASpawnEnemies::BeginPlay()
     APawn* playerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
     //プレイヤーキャラクターを保持します。
     ABaseCharacter* playerCharacter = Cast<ABaseCharacter>(playerPawn);
-    //「playerCharacter」が成立するとき、AddDynamicを呼び出します。
     if (playerCharacter)
     {
-        playerCharacter->OnCharacterDied.AddDynamic(this, &ASpawnEnemies::HandleGameOver);
+        playerCharacter->m_onCharacterDied.AddDynamic(this, &ASpawnEnemies::HandleGameOver);
     }
 
     //ゲーム開始時に自動的にスポーンを開始する場合は、ActivateSpawn()を呼び出す
@@ -122,7 +120,6 @@ void ASpawnEnemies::ReleasePreparedEnemies()
     m_bEnemiesReleased = true;
     SetAllSpawnedEnemyGameplayEnabled(true);
     UpdateEnemyCountWidget();
-    //「g_enemyCountWidget.IsValid()」が成立するとき、ShowMissionObjectiveを呼び出します。
     if (g_enemyCountWidget.IsValid())
     {
         g_enemyCountWidget->ShowMissionObjective(GetMissionRemainingEnemyCount());
@@ -133,7 +130,6 @@ void ASpawnEnemies::ReleasePreparedEnemies()
 //ウィジェットを確実に生成する関数
 void ASpawnEnemies::EnsureEnemyCountWidget()
 {
-    //「g_enemyCountWidget.IsValid()」が成立するとき、Getを呼び出します。
     if (g_enemyCountWidget.IsValid())
     {
         m_pEnemyCountWidget = g_enemyCountWidget.Get();
@@ -143,18 +139,15 @@ void ASpawnEnemies::EnsureEnemyCountWidget()
     //ウィジェットがまだ生成されていない場合は、m_enemyCountが設定されているか確認する
     //ウィジェットを生成して、グローバル変数に保持する
     TSubclassOf<UEnemyCount> WidgetClass = GetDefault<UZombieAttackUISettings>()->GetEnemyCountWidgetClass();
-    //「!WidgetClass」が成立するとき、WidgetClassを更新します。
     if (!WidgetClass)
     {
         WidgetClass = m_enemyCount;
-        //「!WidgetClass」が成立するとき、StaticClassを呼び出します。
         if (!WidgetClass)
         {
             WidgetClass = UEnemyCount::StaticClass();
         }
     }
     m_pEnemyCountWidget = CreateWidget<UEnemyCount>(GetWorld(), WidgetClass);
-    //「m_pEnemyCountWidget」が成立するとき、AddToViewportを呼び出します。
     if (m_pEnemyCountWidget)
     {
         m_pEnemyCountWidget->AddToViewport(10);
@@ -165,10 +158,9 @@ void ASpawnEnemies::EnsureEnemyCountWidget()
 }
 
 //敵の残り数をウィジェットに反映する関数
-void ASpawnEnemies::NotifyGoalActivated(UWorld* World)
+void ASpawnEnemies::NotifyGoalActivated(UWorld* _pWorld)
 {
-    //「World && g_enemyCountWidget.IsValid()」が成立するとき、ShowGoalReadyを呼び出します。
-    if (World && g_enemyCountWidget.IsValid())
+    if (_pWorld && g_enemyCountWidget.IsValid())
     {
         g_enemyCountWidget->ShowGoalReady();
     }
@@ -195,23 +187,17 @@ int32 ASpawnEnemies::GetMissionRemainingEnemyCount() const
 {
     //ワールドを返します。
     const UWorld* world = GetWorld();
-    //「!world」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!world) { return m_remainingEnemies; }
-
-    //totalRemainingEnemiesは、0から算出した数値を後続の判定または計算に使います。
     int32 totalRemainingEnemies = 0;
     //「TActorIterator<ASpawnEnemies> iterator(world); iterator; ++iterator」で列挙される各要素へ、ループ本体の判定と更新を適用します。
     for (TActorIterator<ASpawnEnemies> iterator(world); iterator; ++iterator)
     {
-        //spawnActorは、*iteratorから取得した参照を後続の呼び出しで使います。
         const ASpawnEnemies* spawnActor = *iterator;
-        //「IsValid(spawnActor) && spawnActor->m_bIsActivated」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
         if (IsValid(spawnActor) && spawnActor->m_bIsActivated)
         {
             totalRemainingEnemies += spawnActor->m_remainingEnemies;
         }
     }
-    //totalRemainingEnemiesは、直後の初期化結果を、同じスコープ内でこの名前を参照する計算や関数呼び出しへ渡すために使います。
     return totalRemainingEnemies;
 }
 
@@ -268,12 +254,12 @@ void ASpawnEnemies::SpawnAllWaves(bool _bFreezeAfterSpawn)
             (CountValidEnemyClasses(wave.m_waveEnemyClasses) > 0) ? wave.m_waveEnemyClasses : m_enemyClasses;
 
         //Waveの敵を生成する
-        SpawnWaveEnemy(wave.enemiesToSpawn, spawnClasses);
+        SpawnWaveEnemy(wave.m_enemiesToSpawn, spawnClasses);
 
         //Waveのボスクラスが設定されている場合は、ボスを生成する
-        if (wave.bossClass)
+        if (wave.m_bossClass)
         {
-            SpawnBoss(wave.bossClass);
+            SpawnBoss(wave.m_bossClass);
         }
     }
 
@@ -324,12 +310,12 @@ void ASpawnEnemies::StartNextWave()
         (CountValidEnemyClasses(wave.m_waveEnemyClasses) > 0) ? wave.m_waveEnemyClasses : m_enemyClasses;
 
     //Waveの敵を生成する
-    SpawnWaveEnemy(wave.enemiesToSpawn, spawnClasses);
+    SpawnWaveEnemy(wave.m_enemiesToSpawn, spawnClasses);
 
     //Waveのボスクラスが設定されている場合は、ボスを生成する
-    if (wave.bossClass)
+    if (wave.m_bossClass)
     {
-        SpawnBoss(wave.bossClass);
+        SpawnBoss(wave.m_bossClass);
     }
 
     //ウィジェットを更新する
@@ -354,12 +340,9 @@ void ASpawnEnemies::EndWave()
     const int32 nextIndex = m_currentWaveIndex + 1;
     //判定結果を後の処理で使えるように記録します。
     const bool bHasNextWave = (nextIndex < m_waves.Num()) && (nextIndex < m_maxWaveIndex);
-
-    //「bHasNextWave」が成立するとき、Maxを呼び出します。
     if (bHasNextWave)
     {
-        //delayは、FMath::Max(0.0f, m_waves[m_currentWaveIndex].timeBetweenSpawns)から算出した数値を後続の判定または計算に使います。
-        const float delay = FMath::Max(0.0f, m_waves[m_currentWaveIndex].timeBetweenSpawns);
+        const float delay = FMath::Max(0.0f, m_waves[m_currentWaveIndex].m_spawnInterval);
         GetWorld()->GetTimerManager().SetTimer(m_waveTimerHandle, this, &ASpawnEnemies::StartNextWave, delay, false);
         return;
     }
@@ -367,7 +350,6 @@ void ASpawnEnemies::EndWave()
     //Waveがすべて終了した場合、次のSpawnerをアクティブ化する
     for (ASpawnEnemies* nextSpawn : m_nextSpawnActors)
     {
-        //「nextSpawn && !nextSpawn->m_bIsActivated」が成立するとき、ActivateSpawnを呼び出します。
         if (nextSpawn && !nextSpawn->m_bIsActivated)
         {
             nextSpawn->ActivateSpawn();
@@ -389,7 +371,6 @@ void ASpawnEnemies::SpawnWaveEnemy(int32 _count, const TArray<TSubclassOf<AEnemy
 
     //ワールドを取得する
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、GetCurrentを呼び出します。
     if (!world) { return; }
 
     //ナビゲーションシステムを取得する
@@ -406,7 +387,6 @@ void ASpawnEnemies::SpawnWaveEnemy(int32 _count, const TArray<TSubclassOf<AEnemy
         {
             //敵クラスの配列からランダムにインデックスを選択する
             const int32 classIndex = FMath::RandRange(0, _enemyClasses.Num() - 1);
-            //「_enemyClasses[classIndex]」が成立するとき、selectedClassを更新します。
             if (_enemyClasses[classIndex])
             {
                 //有効な敵クラスが見つかった場合は、selectedClassに設定してループを抜ける
@@ -423,7 +403,6 @@ void ASpawnEnemies::SpawnWaveEnemy(int32 _count, const TArray<TSubclassOf<AEnemy
 
         //ナビゲーションシステムを使用して、指定された範囲内でランダムなスポーンポイントを取得する
         const FVector desiredPosition = GetRandomSpawnPointInRect();
-        //navLocationは、位置と向きの計算結果を移動、照準、または描画位置へ反映するために使います。
         FNavLocation navLocation;
         //探索対象を有効な範囲内で発見できたかを示します。
         const bool bFound = navSystem && navSystem->GetRandomReachablePointInRadius(desiredPosition, m_spawnRadius, navLocation);
@@ -434,7 +413,6 @@ void ASpawnEnemies::SpawnWaveEnemy(int32 _count, const TArray<TSubclassOf<AEnemy
 
         //敵のカプセルコンポーネントの半径を取得する
         float capsuleHalfHeight = 0.0f;
-        //「const ACharacter* defaultCharacter」が成立するとき、GetDefaultObjectを呼び出します。
         if (const ACharacter* defaultCharacter = Cast<ACharacter>(selectedClass->GetDefaultObject()))
         {
             //カプセルコンポーネントが存在する場合は、スケールされたカプセルの半径を取得する
@@ -446,7 +424,6 @@ void ASpawnEnemies::SpawnWaveEnemy(int32 _count, const TArray<TSubclassOf<AEnemy
 
         //地面の高さを取得するためにラインをトレースする
         FHitResult groundHit;
-        //queryParamsは、トレースや関数呼び出しへ渡す検索条件を設定するために使います。
         FCollisionQueryParams queryParams;
         queryParams.bTraceComplex = true;
         queryParams.AddIgnoredActor(this);
@@ -473,7 +450,6 @@ void ASpawnEnemies::SpawnWaveEnemy(int32 _count, const TArray<TSubclassOf<AEnemy
         //スポーンに成功した場合は、敵のコントローラーを生成し、リストに追加する
         if (spawnedEnemy)
         {
-            //「!spawnedEnemy->GetController()」が成立するとき、SpawnDefaultControllerを呼び出します。
             if (!spawnedEnemy->GetController())
             {
                 spawnedEnemy->SpawnDefaultController();
@@ -496,7 +472,6 @@ void ASpawnEnemies::SpawnBoss(TSubclassOf<AEnemyChara> _bossClass)
 
     //ワールドを取得する
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、GetCurrentを呼び出します。
     if (!world) { return; }
 
     //ナビゲーションシステムを取得する
@@ -504,11 +479,9 @@ void ASpawnEnemies::SpawnBoss(TSubclassOf<AEnemyChara> _bossClass)
 
     //ボスのカプセルコンポーネントの半径を取得する
     float capsuleHalfHeight = 0.0f;
-    //「const ACharacter* defaultCharacter = Cast<ACharacter>(_bossClass->GetDefaultObject())」が成立するとき、
     //続けて「defaultCharacter->GetCapsuleComponent()」を判定します。
     if (const ACharacter* defaultCharacter = Cast<ACharacter>(_bossClass->GetDefaultObject()))
     {
-        //「defaultCharacter->GetCapsuleComponent()」が成立するとき、capsuleHalfHeightを更新します。
         if (defaultCharacter->GetCapsuleComponent())
         {
             capsuleHalfHeight = defaultCharacter->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
@@ -524,9 +497,7 @@ void ASpawnEnemies::SpawnBoss(TSubclassOf<AEnemyChara> _bossClass)
         //「int32 index = 0; index < 5; ++index」で列挙される各要素へ、ループ本体の判定と更新を適用します。
         for (int32 index = 0; index < 5; ++index)
         {
-            //navLocationは、位置と向きの計算結果を移動、照準、または描画位置へ反映するために使います。
             FNavLocation navLocation;
-            //「navSystem->GetRandomReachablePointInRadius(GetActorLocation(), m_spawnRadius * 0.5f, navL…」が成立するとき、Addを呼び出します。
             if (navSystem->GetRandomReachablePointInRadius(GetActorLocation(), m_spawnRadius * 0.5f, navLocation))
             {
                 candidates.Add(navLocation.Location);
@@ -541,7 +512,6 @@ void ASpawnEnemies::SpawnBoss(TSubclassOf<AEnemyChara> _bossClass)
     {
         //地面の高さを取得するためにラインをトレースする
         FHitResult groundHit;
-        //queryParamsは、トレースや関数呼び出しへ渡す検索条件を設定するために使います。
         FCollisionQueryParams queryParams;
         queryParams.AddIgnoredActor(this);
 
@@ -550,7 +520,6 @@ void ASpawnEnemies::SpawnBoss(TSubclassOf<AEnemyChara> _bossClass)
         //生成候補位置をNavMesh上へ補正できたかを示します。
         const bool bProjectedToNavigation =
             navSystem && navSystem->ProjectPointToNavigation(candidate, projectedLocation, FVector(250.0f, 250.0f, 500.0f));
-        //「bProjectedToNavigation」が成立するとき、candidateを更新します。
         if (bProjectedToNavigation)
         {
             candidate = projectedLocation.Location;
@@ -572,10 +541,8 @@ void ASpawnEnemies::SpawnBoss(TSubclassOf<AEnemyChara> _bossClass)
 
         //ボスをスポーンする
         AEnemyChara* boss = world->SpawnActor<AEnemyChara>(_bossClass, candidate, FRotator::ZeroRotator, spawnParams);
-        //「boss」が成立するとき、続けて「!boss->GetController()」を判定します。
         if (boss)
         {
-            //「!boss->GetController()」が成立するとき、SpawnDefaultControllerを呼び出します。
             if (!boss->GetController())
             {
                 boss->SpawnDefaultController();
@@ -596,7 +563,6 @@ FVector ASpawnEnemies::GetRandomSpawnPointInRect() const
 {
     //矩形内のランダムなX座標とY座標を生成する
     const float randomX = FMath::RandRange(-m_spawnHalfExtentX, m_spawnHalfExtentX);
-    //randomYは、FMath::RandRange(-m_spawnHalfExtentY, m_spawnHalfExtentY)から算出した数値を後続の判定または計算に使います。
     const float randomY = FMath::RandRange(-m_spawnHalfExtentY, m_spawnHalfExtentY);
     //GetActorLocationは、呼び出し元が必要とする対象または計算結果を返します。
     return GetActorLocation() + GetActorRotation().RotateVector(FVector(randomX, randomY, 0.0f));
@@ -614,7 +580,6 @@ void ASpawnEnemies::SetEnemyGameplayEnabled(AEnemyChara* _enemy, bool _bEnabled)
     //敵の移動コンポーネントを取得して、移動モードを設定する
     if (ACharacter* character = Cast<ACharacter>(_enemy))
     {
-        //「UCharacterMovementComponent* movement = character->GetCharacterMovement()」が成立するとき、続けて「_bEnabled」を判定します。
         if (UCharacterMovementComponent* movement = character->GetCharacterMovement())
         {
             //移動モードを有効または無効にする
@@ -638,10 +603,8 @@ void ASpawnEnemies::SetEnemyGameplayEnabled(AEnemyChara* _enemy, bool _bEnabled)
 
     //敵のAIコントローラーを取得して、Tickを有効または無効にする
     AAIController* aiController = Cast<AAIController>(_enemy->GetController());
-    //「aiController」が成立するとき、続けて「_bEnabled」を判定します。
     if (aiController)
     {
-        //「_bEnabled」が成立するとき、SetActorTickEnabledを呼び出します。
         if (_bEnabled)
         {
             aiController->SetActorTickEnabled(true);
@@ -657,7 +620,6 @@ void ASpawnEnemies::SetEnemyGameplayEnabled(AEnemyChara* _enemy, bool _bEnabled)
 //すべてのスポーン済み敵のゲームプレイを有効または無効にする関数
 void ASpawnEnemies::SetAllSpawnedEnemyGameplayEnabled(bool _bEnabled)
 {
-    //「AEnemyChara* enemy : m_spawnedEnemies」の範囲を走査し、SetEnemyGameplayEnabledを呼び出します。
     for (AEnemyChara* enemy : m_spawnedEnemies)
     {
         SetEnemyGameplayEnabled(enemy, _bEnabled);
@@ -669,7 +631,6 @@ void ASpawnEnemies::OnEnemyDeath(AActor* _destroyedActor)
 {
     //破壊されたアクターが敵キャラクターであるかを確認する
     AEnemyChara* deadEnemy = Cast<AEnemyChara>(_destroyedActor);
-    //「!deadEnemy」が成立するとき、Removeを呼び出します。
     if (!deadEnemy) { return; }
 
     //破壊された敵をスポーン済みリストから削除し、残りの敵数を更新する
@@ -680,7 +641,6 @@ void ASpawnEnemies::OnEnemyDeath(AActor* _destroyedActor)
     //全Waveを一度に生成するモードの場合、残りの敵が0になったらゴールをアクティブ化する
     if (m_bSpawnAllWavesAtOnce)
     {
-        //「m_remainingEnemies <= 0」が成立するとき、TryActivateGoalAfterAllEnemiesDefeatedを呼び出します。
         if (m_remainingEnemies <= 0)
         {
             TryActivateGoalAfterAllEnemiesDefeated();
@@ -691,7 +651,6 @@ void ASpawnEnemies::OnEnemyDeath(AActor* _destroyedActor)
     //Waveモードの場合、ボスが倒されたらゴールをアクティブ化する
     if (deadEnemy->IsA<AFinalBossChara>())
     {
-        //「m_pGoalActor」が成立するとき、ActivateGoalを呼び出します。
         if (m_pGoalActor)
         {
             m_pGoalActor->ActivateGoal();
@@ -715,33 +674,22 @@ void ASpawnEnemies::TryActivateGoalAfterAllEnemiesDefeated()
 {
     //ワールドを返します。
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!world) { return; }
-
-    //missionGoalは、nullptrから取得した参照を後続の呼び出しで使います。
     AGoalActor* missionGoal = nullptr;
     //「TActorIterator<ASpawnEnemies> iterator(world); iterator; ++iterator」で列挙される各要素へ、ループ本体の判定と更新を適用します。
     for (TActorIterator<ASpawnEnemies> iterator(world); iterator; ++iterator)
     {
-        //spawnActorは、*iteratorから取得した参照を後続の呼び出しで使います。
         ASpawnEnemies* spawnActor = *iterator;
-        //「!IsValid(spawnActor) || !spawnActor->m_bIsActivated」が成立するとき、現在の要素を飛ばして次の要素へ進みます。
         if (!IsValid(spawnActor) || !spawnActor->m_bIsActivated)
         {
             continue;
         }
-
-        //「spawnActor->m_remainingEnemies > 0」が成立するとき、続けて「!missionGoal && IsValid(spawnActor->m_pGoalActor)」を判定します。
         if (spawnActor->m_remainingEnemies > 0) { return; }
-
-        //「!missionGoal && IsValid(spawnActor->m_pGoalActor)」が成立するとき、missionGoalを更新します。
         if (!missionGoal && IsValid(spawnActor->m_pGoalActor))
         {
             missionGoal = spawnActor->m_pGoalActor;
         }
     }
-
-    //「missionGoal」が成立するとき、ActivateGoalを呼び出します。
     if (missionGoal)
     {
         missionGoal->ActivateGoal();
@@ -778,7 +726,6 @@ void ASpawnEnemies::HandleGameOver(ABaseCharacter* _deadCharacter)
     //すべてのスポーン済み敵を破棄する
     for (AEnemyChara* enemy : m_spawnedEnemies)
     {
-        //「enemy && !enemy->IsPendingKillPending()」が成立するとき、Destroyを呼び出します。
         if (enemy && !enemy->IsPendingKillPending())
         {
             enemy->Destroy();
@@ -795,7 +742,6 @@ void ASpawnEnemies::HandleGameOver(ABaseCharacter* _deadCharacter)
                                            FTimerDelegate::CreateLambda(
                                                [this]()
                                                {
-                                                   //「GetWorld()」が成立するとき、OpenLevelを呼び出します。
                                                    if (GetWorld())
                                                    {
                                                        //Levelへ安全に遷移します。

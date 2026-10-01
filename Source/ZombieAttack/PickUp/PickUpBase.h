@@ -46,15 +46,14 @@ class ZOMBIEATTACK_API APickUpBase : public AActor
     //ゲーム開始時の初期設定を行います。
     virtual void BeginPlay() override;
     //毎フレームの更新を行います。
-    virtual void Tick(float DeltaTime) override;
+    virtual void Tick(float _deltaTime) override;
 
     //アイテムを取得し、効果を反映します。
     UFUNCTION(BlueprintCallable, Category = "Item")
-    void PickUpItem(EItemType Type, float Value);
+    void PickUpItem(EItemType _itemType, float _amount);
 
     //アイテム種類を返します。
     EItemType GetItemType() const { return m_itemType; }
-    //HasPickupPresentationは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool HasPickupPresentation() const;
 
   protected:
@@ -140,8 +139,8 @@ class ZOMBIEATTACK_API APickUpBase : public AActor
 
     //OverlapBeginが発生したときの処理を行います。
     UFUNCTION()
-    void OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex,
-                        bool bFromSweep, const FHitResult& SweepResult);
+    void OnOverlapBegin(UPrimitiveComponent* _pOverlappedComp, AActor* _pOtherActor, UPrimitiveComponent* _pOtherComp, int32 _otherBodyIndex,
+                        bool _bFromSweep, const FHitResult& _sweepResult);
 
   private:
     //ApplyMeshByTypeは、引数の内容をゲーム中の状態または表示へ反映します。

@@ -13,6 +13,11 @@ public class ZombieAttack : ModuleRules
         //ゲーム本体から直接参照するモジュールを登録します。
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "AIModule",
                                                             "GameplayTasks", "NavigationSystem", "Niagara", "Slate", "SlateCore",
-                                                            "DeveloperSettings" });
+                                                            "DeveloperSettings", "AnimGraphRuntime" });
+        //画面の描画テストだけで必要なモジュールをEditorへ限定する。
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI", "ImageCore", "UnrealEd", "BlueprintGraph", "AnimGraph" });
+        }
     }
 }

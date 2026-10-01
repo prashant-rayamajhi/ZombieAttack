@@ -26,7 +26,6 @@ class ZOMBIEATTACK_API AGameFlowGameMode : public AGameModeBase
     virtual void StartPlay() override;
     //HandleStartingNewPlayer_Implementationは、参加したPlayerControllerの開始処理を行い、ゲーム用PawnまたはUIを準備します。
     virtual void HandleStartingNewPlayer_Implementation(APlayerController* _newPlayer) override;
-    //RestartPlayerは、RestartPlayerの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     virtual void RestartPlayer(AController* _newPlayer) override;
 
   private:

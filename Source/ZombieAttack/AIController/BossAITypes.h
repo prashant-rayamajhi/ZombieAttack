@@ -48,81 +48,81 @@ struct FBossDecisionContext
 
     //プレイヤーとの距離
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float DistanceToPlayer = 0.f;
+    float m_distanceToPlayer = 0.f;
 
     //ボスの体力比率
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float BossHealthRatio = 1.f;
+    float m_bossHealthRatio = 1.f;
 
     //プレイヤーの体力比率
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float PlayerHealthRatio = 1.f;
+    float m_playerHealthRatio = 1.f;
 
     //プレイヤーの速度
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float PlayerSpeed = 0.f;
+    float m_playerSpeed = 0.f;
 
     //プレイヤーの横方向の速度
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float PlayerLateralSpeed = 0.f;
+    float m_playerLateralSpeed = 0.f;
 
     //遠距離攻撃を受けている度合い
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float RangedPressure = 0.f;
+    float m_rangedPressure = 0.f;
 
     //プレイヤーの機動性の圧力
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float MobilityPressure = 0.f;
+    float m_mobilityPressure = 0.f;
 
     //ボスの脆弱性の圧力
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float VulnerabilityPressure = 0.f;
+    float m_vulnerabilityPressure = 0.f;
 
     //最近のボスへのダメージ圧力
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float RecentBossDamagePressure = 0.f;
+    float m_recentBossDamagePressure = 0.f;
 
     //最近のプレイヤーへのヒット圧力
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    float RecentSuccessfulHitPressure = 0.f;
+    float m_recentSuccessfulHitPressure = 0.f;
 
     //プレイヤーを直接視認できるかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bHasLineOfSight = false;
+    bool m_bHasLineOfSight = false;
 
     //プレイヤーが照準を合わせているかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerAiming = false;
+    bool m_bPlayerAiming = false;
 
     //プレイヤーがリロード中かどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerReloading = false;
+    bool m_bPlayerReloading = false;
 
     //プレイヤーが回復中かどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerHealing = false;
+    bool m_bPlayerHealing = false;
 
     //プレイヤーが武器を切り替えているかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerSwitchingWeapon = false;
+    bool m_bPlayerSwitchingWeapon = false;
 
     //プレイヤーが遠距離武器を使用しているかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerUsingRangedWeapon = true;
+    bool m_bPlayerUsingRangedWeapon = true;
 
     //プレイヤーがボスに向かって移動しているかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerMovingTowardBoss = false;
+    bool m_bPlayerMovingTowardBoss = false;
 
     //プレイヤーがボスから離れて移動しているかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bPlayerMovingAwayFromBoss = false;
+    bool m_bPlayerMovingAwayFromBoss = false;
 
     //ボスがフェーズ2に入っているかどうか
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    bool bBossPhaseTwo = false;
+    bool m_bBossPhaseTwo = false;
 
     //現在の動きから予測したプレイヤーの位置
     UPROPERTY(BlueprintReadOnly, Category = "Boss AI")
-    FVector PredictedPlayerLocation = FVector::ZeroVector;
+    FVector m_predictedPlayerLocation = FVector::ZeroVector;
 };

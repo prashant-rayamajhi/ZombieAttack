@@ -26,7 +26,7 @@ class ZOMBIEATTACK_API ADayNightCycleManager : public AActor
 
   public:
     //毎フレームの更新を行います。
-    virtual void Tick(float DeltaTime) override;
+    virtual void Tick(float _deltaTime) override;
 
   protected:
     //太陽光源アクター

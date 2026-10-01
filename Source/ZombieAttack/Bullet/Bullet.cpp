@@ -17,7 +17,6 @@ ABullet::ABullet()
     PrimaryActorTick.bCanEverTick = true;
 
     m_pBulletMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BulletMesh"));
-    //「m_pBulletMesh」が成立するとき、RootComponentを更新します。
     if (m_pBulletMesh)
     {
         //ルートコンポーネントに設定。
@@ -34,7 +33,6 @@ ABullet::ABullet()
 
     //弾の移動コンポーネントを作成
     m_pProjectileComp = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileComp"));
-    //「m_pProjectileComp」が成立するとき、m_pProjectileComp->InitialSpeedを更新します。
     if (m_pProjectileComp)
     {
         m_pProjectileComp->InitialSpeed = 10000.0f;
@@ -117,7 +115,6 @@ void ABullet::OnHit(UPrimitiveComponent* _hitComp, AActor* _otherActor, UPrimiti
     //弾が当たったオブジェクトに物理的な衝撃を与える
     if (_otherComp && _otherComp->IsSimulatingPhysics() && !_otherActor->IsA<APlayerChara>())
     {
-        //impulseDirectionは、m_moveDirection.IsNearlyZero() ? GetActorForwardVector() : m_moveDirect…から求めた空間情報を位置または向きの計算に使います。
         const FVector impulseDirection = m_moveDirection.IsNearlyZero() ? GetActorForwardVector() : m_moveDirection;
         _otherComp->AddImpulseAtLocation(impulseDirection * 100000.0f, _hit.ImpactPoint);
     }
@@ -131,7 +128,6 @@ void ABullet::OnHit(UPrimitiveComponent* _hitComp, AActor* _otherActor, UPrimiti
 
     //弾が当たった敵へ、ダメージより先に命中位置を渡す
     const FVector damageDirection = m_moveDirection.IsNearlyZero() ? GetActorForwardVector() : m_moveDirection;
-    //「AEnemyChara* hitEnemy = Cast<AEnemyChara>(_otherActor)」が成立するとき、PlayBulletImpactFeedbackを呼び出します。
     if (AEnemyChara* hitEnemy = Cast<AEnemyChara>(_otherActor))
     {
         hitEnemy->PlayBulletImpactFeedback(_hit, damageDirection);
@@ -150,7 +146,6 @@ void ABullet::SpawnImpactEffectOnce(const FHitResult& _hit)
 
     //ワールドを取得
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!world) { return; }
 
     //弾が当たった位置に命中エフェクトを生成
@@ -171,7 +166,6 @@ void ABullet::DestroyNiagaraAfterDelay(UNiagaraComponent* _component, float _del
 
     //ワールドを取得
     UWorld* world = GetWorld();
-    //「!world」が成立するとき、Deactivateを呼び出します。
     if (!world)
     {
         _component->Deactivate();
@@ -181,7 +175,6 @@ void ABullet::DestroyNiagaraAfterDelay(UNiagaraComponent* _component, float _del
 
     //破棄するNiagaraコンポーネントを弱参照で保持
     TWeakObjectPtr<UNiagaraComponent> weakComponent = _component;
-    //timerHandleは、タイマーの登録と解除を同じハンドルで管理するために使います。
     FTimerHandle timerHandle;
 
     //指定された遅延時間後にNiagaraコンポーネントを停止して破棄するタイマーを設定
@@ -189,12 +182,8 @@ void ABullet::DestroyNiagaraAfterDelay(UNiagaraComponent* _component, float _del
                                       FTimerDelegate::CreateLambda(
                                           [weakComponent]()
                                           {
-                                              //「!weakComponent.IsValid()」が成立するとき、Getを呼び出します。
                                               if (!weakComponent.IsValid()) { return; }
-
-                                              //componentは、weakComponent.Get()から取得した参照を後続の呼び出しで使います。
                                               UNiagaraComponent* component = weakComponent.Get();
-                                              //「!IsValid(component)」が成立するとき、Deactivateを呼び出します。
                                               if (!IsValid(component)) { return; }
 
                                               component->Deactivate();

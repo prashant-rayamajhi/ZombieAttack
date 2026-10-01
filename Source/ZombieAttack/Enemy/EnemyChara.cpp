@@ -1,4 +1,5 @@
 #include "EnemyChara.h"
+#include "Components/EnemyAttackTraceComponent.h"
 #include "../AIController/EnemyAIController.h"
 #include "../PickUp/PickUpBase.h"
 #include "../Player/PlayerChara.h"
@@ -22,6 +23,8 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "UObject/UnrealType.h"
+#include "ZombieAttack/Animation/Enemy/EnemyAnimationTiming.h"
+#include "TimerManager.h"
 
 //コンストラクタ
 AEnemyChara::AEnemyChara()
@@ -30,17 +33,21 @@ AEnemyChara::AEnemyChara()
       m_patrolSoundIntervalMin(8.f), m_patrolSoundIntervalMax(20.f), m_patrolSoundHearingRange(1800.f), m_patrolWalkSpeed(120.f),
       m_chaseRunSpeed(500.f), m_bEnableVisibilityAssist(true), m_notSeenAlertTime(30.f), m_boostedNotSeenAlertTime(30.f),
       m_visibilityAssistMaxDistance(9000.f), m_visibilityAssistFocusDot(0.9f), m_visibilityAssistCheckInterval(0.2f), m_outlineReleaseDelay(0.6f),
-      m_attackRange(150.f), m_attackInterval(1.5f), m_attackHitFallbackTime(0.6f), m_hitDamage(10), m_pAttackCollision(nullptr),
+      m_attackRange(150.f), m_attackInterval(1.5f), m_hitDamage(10), m_pAttackCollision(nullptr),
       m_pAttackWindupVFX(nullptr), m_pAttackImpactVFX(nullptr), m_pActiveAttackVFX(nullptr), m_pHitFeedbackComponent(nullptr),
       m_pPlayerChara(nullptr), m_moveState(EEnemyMoveState::Patrol), m_bIsDead(false), m_bIsAttacking(false), m_bHitAppliedThisAttack(false),
       m_bRedOutlineEnabled(false), m_bDefeatBroadcast(false), m_bSearchAssistBoosted(false), m_attackCooldownRemaining(0.f), m_notSeenTimer(0.f),
       m_visibilityAssistCheckAccumulator(0.f), m_outlineReleaseAccumulator(0.f), m_bAttackHitThisSwing(false)
 {
+    SetLocomotionAssets(TEXT("/Game/Assets/Enemy/Animation/Minion/AnimationSequence"), TEXT("Zombie_Idle"),
+                        TEXT("Walking__1_"), TEXT("Zombie_Running"), TEXT("Zombie_Scream"));
     //通常敵の攻撃VFXは使用せず、アニメーションと被弾画面演出で伝えます。
     m_pAttackWindupVFX = nullptr;
     m_pAttackImpactVFX = nullptr;
     //Tickを有効化する
     PrimaryActorTick.bCanEverTick = true;
+    //手足が高速に動く攻撃でも、骨の更新後に連続した接触範囲を調べる。
+    CreateDefaultSubobject<UEnemyAttackTraceComponent>(TEXT("AttackTrace"));
     AIControllerClass = AEnemyAIController::StaticClass();
     AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
@@ -57,7 +64,6 @@ AEnemyChara::AEnemyChara()
 
     //攻撃判定用のボックスコンポーネントを作成し、右手のソケットにアタッチする
     m_pAttackCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("AttackCollision"));
-    //「m_pAttackCollision」が成立するとき、SetupAttachmentを呼び出します。
     if (m_pAttackCollision)
     {
         m_pAttackCollision->SetupAttachment(GetMesh(), TEXT("hand_r"));
@@ -87,7 +93,6 @@ AEnemyChara::AEnemyChara()
 //BulletImpactFeedbackを再生します。
 void AEnemyChara::PlayBulletImpactFeedback(const FHitResult& _hitResult, const FVector& _shotDirection)
 {
-    //「!m_pHitFeedbackComponent || m_bIsDead」が成立するとき、PlayBulletImpactを呼び出します。
     if (!m_pHitFeedbackComponent || m_bIsDead) { return; }
 
     m_pHitFeedbackComponent->PlayBulletImpact(_hitResult, _shotDirection);
@@ -98,6 +103,7 @@ void AEnemyChara::BeginPlay()
 {
     //親クラスのBeginPlayを呼び出す
     Super::BeginPlay();
+    InitializeEnemyAnimation();
 
     //配置済みBPの設定漏れや別Skeletonの混入を開始時に検出します。
 
@@ -110,14 +116,14 @@ void AEnemyChara::BeginPlay()
     m_pAttackImpactVFX = nullptr;
 
     //体力を最大値に設定する
-    m_Hp = m_MaxHp;
+    m_hp = m_maxHp;
     m_pPlayerChara = Cast<APlayerChara>(UGameplayStatics::GetPlayerCharacter(this, 0));
 
     //体力ウィジェットを取得し、所有者を設定する
     if (UEnemyHP* HealthWidget = Cast<UEnemyHP>(m_pHealthComp->GetUserWidgetObject()))
     {
         HealthWidget->SetOwner(this);
-        OnHealthChanged.AddDynamic(HealthWidget, &UEnemyHP::UpdateHealthUI);
+        m_onHealthChanged.AddDynamic(HealthWidget, &UEnemyHP::UpdateHealthUI);
         HealthWidget->UpdateHealthUI();
     }
     m_pHealthComp->SetHiddenInGame(true);
@@ -126,6 +132,7 @@ void AEnemyChara::BeginPlay()
     if (m_pAttackCollision)
     {
         m_pAttackCollision->OnComponentBeginOverlap.AddDynamic(this, &AEnemyChara::OnAttackCollisionOverlap);
+        PrepareAttackContact(TEXT("RightHand"));
         SetAttackCollisionEnabled(false);
     }
 
@@ -152,8 +159,17 @@ void AEnemyChara::Tick(float _deltaTime)
 {
     //親クラスのTickを呼び出す
     Super::Tick(_deltaTime);
-    //「m_bIsDead」が成立するとき、SynchronizeLocomotionAnimationを呼び出します。
     if (m_bIsDead) { return; }
+
+    //ボスも通常敵も、攻撃と咆哮で停止している間は追跡速度へ戻さない
+    if (AEnemyAIController* controller = Cast<AEnemyAIController>(GetController()))
+    {
+        if (!m_bIsAttacking && !controller->IsAlertReactionActive())
+        {
+            const bool chasing = controller->GetCurrentState() == EEnemyAIState::Chase;
+            GetCharacterMovement()->MaxWalkSpeed = chasing ? m_chaseRunSpeed : m_patrolWalkSpeed;
+        }
+    }
 
     //AI移動でカプセルが動いた場合も、アニメーション側へ実速度を毎フレーム渡す
     SynchronizeLocomotionAnimation();
@@ -176,9 +192,7 @@ void AEnemyChara::SynchronizeLocomotionAnimation()
 {
     //メッシュを返します。
     USkeletalMeshComponent* meshComponent = GetMesh();
-    //animInstanceは、meshComponent ? meshComponent->GetAnimInstance() : nullptrから取得した参照を後続の呼び出しで使います。
     UAnimInstance* animInstance = meshComponent ? meshComponent->GetAnimInstance() : nullptr;
-    //「!animInstance」が成立するとき、GetVelocityを呼び出します。
     if (!animInstance) { return; }
 
     //速度を返します。
@@ -189,11 +203,13 @@ void AEnemyChara::SynchronizeLocomotionAnimation()
     {
         groundSpeed = 0.0f;
     }
-
-    //「FFloatProperty* speedProperty」が成立するとき、GetClassを呼び出します。
     if (FFloatProperty* speedProperty = FindFProperty<FFloatProperty>(animInstance->GetClass(), TEXT("Speed")))
     {
         speedProperty->SetPropertyValue_InContainer(animInstance, groundSpeed);
+    }
+    else if (FDoubleProperty* preciseSpeed = FindFProperty<FDoubleProperty>(animInstance->GetClass(), TEXT("Speed")))
+    {
+        preciseSpeed->SetPropertyValue_InContainer(animInstance, groundSpeed);
     }
 }
 
@@ -205,26 +221,23 @@ float AEnemyChara::TakeDamage(float _damageAmount, const FDamageEvent& _damageEv
 
     //親クラスのTakeDamageを呼び出し、適用されたダメージ量を取得する
     const float AppliedDamage = Super::TakeDamage(_damageAmount, _damageEvent, _eventInstigator, _damageCauser);
-    //「AppliedDamage <= 0.f」が成立するとき、Clampを呼び出します。
     if (AppliedDamage <= 0.f) { return 0.f; }
 
     //体力を減算し、0から最大体力の範囲にクランプする
-    m_Hp = FMath::Clamp(m_Hp - AppliedDamage, 0.f, m_MaxHp);
+    m_hp = FMath::Clamp(m_hp - AppliedDamage, 0.f, m_maxHp);
 
     //体力が変化したことを通知する
-    OnHealthChanged.Broadcast();
+    m_onHealthChanged.Broadcast();
 
     //アラートアウトラインのタイマーをリセットし、体力バーを一時的に表示する
     ResetNotSeenTimer();
     ShowHealthBarTemporarily();
 
     //体力が0以下になった場合、死亡処理を行う
-    if (m_Hp <= 0.f)
+    if (m_hp <= 0.f)
     {
-        //「_eventInstigator」が成立するとき、続けて「APlayerChara* defeatingPlayer = Cast<APlayerChara>(_eventInstigator->…」を判定します。
         if (_eventInstigator)
         {
-            //「APlayerChara* defeatingPlayer = Cast<APlayerChara>(_eventInstigator->GetPawn())」が成立するとき、NotifyEnemyDefeatedを呼び出します。
             if (APlayerChara* defeatingPlayer = Cast<APlayerChara>(_eventInstigator->GetPawn()))
             {
                 defeatingPlayer->NotifyEnemyDefeated();
@@ -238,7 +251,6 @@ float AEnemyChara::TakeDamage(float _damageAmount, const FDamageEvent& _damageEv
         }
         m_bIsDead = true;
         PlayDeathAnimationAndDie();
-        //AppliedDamageは、ゲーム判定に使用する数値を計算し、後続の比較または更新へ渡すために使います。
         return AppliedDamage;
     }
 
@@ -258,152 +270,13 @@ float AEnemyChara::TakeDamage(float _damageAmount, const FDamageEvent& _damageEv
             AIController->StartChase(m_pPlayerChara);
         }
     }
-
-    //AppliedDamageは、ゲーム判定に使用する数値を計算し、後続の比較または更新へ渡すために使います。
     return AppliedDamage;
-}
-
-//攻撃ロジックを処理する
-void AEnemyChara::HandleAttackLogic(float _deltaTime)
-{
-    //AIコントローラーを取得し、プレイヤーキャラクターが存在しないか、死亡している場合は処理を終了する
-    AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController());
-    //「!AIController || !m_pPlayerChara || m_pPlayerChara->IsDead()」が成立するとき、GetCurrentStateを呼び出します。
-    if (!AIController || !m_pPlayerChara || m_pPlayerChara->IsDead()) { return; }
-
-    //現在のAI状態を取得し、パトロールまたは探索状態の場合は移動速度をパトロール速度に設定する
-    const EEnemyAIState State = AIController->GetCurrentState();
-    //「State == EEnemyAIState::Patrol || State == EEnemyAIState::Search」が成立するとき、m_moveStateを更新します。
-    if (State == EEnemyAIState::Patrol || State == EEnemyAIState::Search)
-    {
-        m_moveState = EEnemyMoveState::Patrol;
-        GetCharacterMovement()->MaxWalkSpeed = m_patrolWalkSpeed;
-        return;
-    }
-
-    //現在のAI状態が追跡または攻撃状態の場合、移動状態を戦闘に設定し、攻撃中でない場合は移動速度を追跡速度に設定する
-    m_moveState = EEnemyMoveState::Combat;
-    //「m_bIsAttacking」が成立するとき、GetCharacterMovementを呼び出します。
-    if (m_bIsAttacking) { return; }
-
-    //追跡速度に設定する
-    GetCharacterMovement()->MaxWalkSpeed = m_chaseRunSpeed;
-
-    //現在のAI状態が追跡状態で、攻撃クールダウンが0以下で、プレイヤーとの距離が攻撃範囲以内の場合、攻撃を開始する
-    if (State == EEnemyAIState::Chase && m_attackCooldownRemaining <= 0.f && GetEffectiveDistanceToPlayer() <= m_attackRange)
-    {
-        BeginAttack();
-    }
-}
-
-//攻撃を開始する
-void AEnemyChara::BeginAttack()
-{
-    //攻撃中、死亡中、またはプレイヤーキャラクターが存在しない場合は処理を終了する
-    if (m_bIsDead || m_bIsAttacking || !m_pPlayerChara) { return; }
-
-    //攻撃中フラグを設定し、ヒットが適用されたかどうかのフラグをリセットする
-    m_bIsAttacking = true;
-    m_bHitAppliedThisAttack = false;
-
-    //経路追従停止後に数フレーム残る速度を消し、停止アニメーション中の滑りを防ぎます。
-    if (UCharacterMovementComponent* movementComponent = GetCharacterMovement())
-    {
-        movementComponent->StopMovementImmediately();
-        movementComponent->MaxWalkSpeed = 0.0f;
-    }
-
-    //AIコントローラーを取得し、攻撃開始を通知する
-    if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
-    {
-        AIController->NotifyAttackStarted();
-    }
-
-    //プレイヤーの方向を向く
-    const FVector ToPlayer = m_pPlayerChara->GetActorLocation() - GetActorLocation();
-    SetActorRotation(FRotator(0.f, ToPlayer.Rotation().Yaw, 0.f));
-    PlayEnemySound(m_pAttackSound);
-    //攻撃モンタージュを再生し、再生時間を取得する
-    float MontageDuration = 0.f;
-    if (!IsMontageCompatible(m_pAttackMontage))
-    {
-        EndAttack();
-        return;
-    }
-
-    MontageDuration = PlayAnimMontage(m_pAttackMontage, 1.15f);
-    if (MontageDuration <= 0.0f)
-    {
-        EndAttack();
-        return;
-    }
-
-    //攻撃ヒットのフォールバックタイマーを設定する。モンタージュが再生されない場合や、通知が正しく呼ばれない場合に備える
-    const float fallbackDelay = MontageDuration > 0.0f
-                                    //値が範囲を超えないように収めます。
-                                    ? FMath::Clamp(MontageDuration * 0.40f, 0.2f, FMath::Max(0.2f, MontageDuration - 0.1f))
-                                    : FMath::Max(0.05f, m_attackHitFallbackTime);
-    GetWorldTimerManager().SetTimer(m_attackHitTimer, this, &AEnemyChara::PerformAttackHitFallback, fallbackDelay, false);
-    GetWorldTimerManager().SetTimer(m_attackEndTimer, this, &AEnemyChara::EndAttack,
-                                    MontageDuration > 0.f ? MontageDuration : m_attackHitFallbackTime + 0.15f, false);
-}
-
-//攻撃ヒットのフォールバック処理を行う
-void AEnemyChara::PerformAttackHitFallback() { PerformAttackHit(1.f); }
-
-//攻撃ヒットを適用する
-void AEnemyChara::PerformAttackHit(float _damageMultiplier)
-{
-    //攻撃中でない、ヒットがすでに適用されている、または死亡している場合は処理を終了する
-    if (!m_bIsAttacking || m_bHitAppliedThisAttack || m_bIsDead) { return; }
-
-    //ヒットが適用されたことをフラグで記録し、攻撃ヒットタイマーをクリアする
-    m_bHitAppliedThisAttack = true;
-    GetWorldTimerManager().ClearTimer(m_attackHitTimer);
-
-    //プレイヤーキャラクターが存在しない、または死亡している場合は処理を終了する
-    if (!m_pPlayerChara || m_pPlayerChara->IsDead()) { return; }
-
-    //プレイヤーとの距離が攻撃範囲以内の場合、ダメージを適用する
-    if (GetEffectiveDistanceToPlayer() <= m_attackRange)
-    {
-        //ダメージを処理します。
-        UGameplayStatics::ApplyDamage(m_pPlayerChara, static_cast<float>(m_hitDamage) * FMath::Max(0.f, _damageMultiplier), GetController(), this,
-                                      UDamageType::StaticClass());
-        OnEnemyAttackHit(m_pPlayerChara);
-    }
-}
-
-//攻撃を終了する
-void AEnemyChara::EndAttack()
-{
-    //攻撃中でない場合は処理を終了する
-    if (!m_bIsAttacking) { return; }
-
-    //攻撃中フラグをリセットし、攻撃クールダウンをリセットする
-    m_bIsAttacking = false;
-    EndAttackVFXWindow();
-    m_attackCooldownRemaining = m_attackInterval;
-    GetWorldTimerManager().ClearTimer(m_attackHitTimer);
-
-    //次の追跡要求を受ける前に、停止していた移動速度を元へ戻します。
-    if (UCharacterMovementComponent* movementComponent = GetCharacterMovement())
-    {
-        movementComponent->MaxWalkSpeed = m_chaseRunSpeed;
-    }
-
-    //AIコントローラーを取得し、攻撃終了を通知する
-    if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
-    {
-        AIController->NotifyAttackFinished();
-    }
 }
 
 //攻撃判定の有効区間に合わせて、手元へ小さな軌跡エフェクトを表示する
 void AEnemyChara::BeginAttackVFXWindow()
 {
     EndAttackVFXWindow();
-    //「!m_pAttackWindupVFX || !m_pAttackCollision」が成立するとき、m_pActiveAttackVFXを更新します。
     if (!m_pAttackWindupVFX || !m_pAttackCollision) { return; }
 
     m_pActiveAttackVFX =
@@ -415,7 +288,6 @@ void AEnemyChara::BeginAttackVFXWindow()
 //攻撃判定と同時に軌跡エフェクトを停止する
 void AEnemyChara::EndAttackVFXWindow()
 {
-    //「!m_pActiveAttackVFX」が成立するとき、Deactivateを呼び出します。
     if (!m_pActiveAttackVFX) { return; }
     m_pActiveAttackVFX->Deactivate();
     m_pActiveAttackVFX = nullptr;
@@ -429,7 +301,6 @@ bool AEnemyChara::IsMontageCompatible(const UAnimMontage* _montage) const
 {
     //メッシュを返します。
     const USkeletalMeshComponent* mesh = GetMesh();
-    //skeletalMeshは、mesh ? mesh->GetSkeletalMeshAsset() : nullptrから取得した参照を後続の呼び出しで使います。
     const USkeletalMesh* skeletalMesh = mesh ? mesh->GetSkeletalMeshAsset() : nullptr;
     return _montage && skeletalMesh && _montage->GetSkeleton() == skeletalMesh->GetSkeleton();
 }
@@ -465,7 +336,6 @@ void AEnemyChara::ShowHealthBarTemporarily(float _displaySeconds)
                                     FTimerDelegate::CreateLambda(
                                         [WeakThis]()
                                         {
-                                            //「WeakThis.IsValid() && !WeakThis->m_bIsDead && WeakThis->m_pHealthComp」が成立するとき、SetHiddenInGameを呼び出します。
                                             if (WeakThis.IsValid() && !WeakThis->m_bIsDead && WeakThis->m_pHealthComp)
                                             {
                                                 WeakThis->m_pHealthComp->SetHiddenInGame(true);
@@ -506,7 +376,6 @@ void AEnemyChara::PlayEnemySound(USoundBase* _sound, float _volumeMultiplier) co
 
     //音量倍率を0以上にクランプする
     float EffectiveVolume = FMath::Max(0.f, _volumeMultiplier);
-    //「!m_pSoundAttenuation」が成立するとき、続けて「const APlayerChara* Player = GetPlayerCharacter()」を判定します。
     if (!m_pSoundAttenuation)
     {
         //サウンド減衰が設定されていない場合、プレイヤーとの距離に応じて音量を減衰させる
@@ -514,9 +383,7 @@ void AEnemyChara::PlayEnemySound(USoundBase* _sound, float _volumeMultiplier) co
         {
             //距離に応じて音量を減衰させる
             const float Distance = FVector::Dist(GetActorLocation(), Player->GetActorLocation());
-            //InnerRadiusは、200.fから算出した数値を後続の判定または計算に使います。
             const float InnerRadius = 200.f;
-            //FalloffRangeは、FMath::Max(InnerRadius + 1.f, m_patrolSoundHearingRange)から算出した数値を後続の判定または計算に使います。
             const float FalloffRange = FMath::Max(InnerRadius + 1.f, m_patrolSoundHearingRange);
             //透明度を保持します。
             const float Alpha = FMath::Clamp((Distance - InnerRadius) / (FalloffRange - InnerRadius), 0.f, 1.f);
@@ -538,8 +405,12 @@ APlayerChara* AEnemyChara::GetPlayerCharacter() const { return Cast<APlayerChara
 //死亡アニメーションを再生し、死亡処理を行う
 void AEnemyChara::PlayDeathAnimationAndDie()
 {
+    //死亡直後から攻撃通知と手の当たり判定を受け付けない
+    m_bIsDead = true;
+    m_bIsAttacking = false;
+    SetAttackCollisionEnabled(false);
+    EndAttackVFXWindow();
     //死亡フラグを設定し、攻撃関連のタイマーをクリアする
-    GetWorldTimerManager().ClearTimer(m_attackHitTimer);
     GetWorldTimerManager().ClearTimer(m_attackEndTimer);
     GetWorldTimerManager().ClearTimer(m_deathPoseFreezeTimer);
     GetWorldTimerManager().ClearTimer(m_patrolSoundTimer);
@@ -568,8 +439,6 @@ void AEnemyChara::PlayDeathAnimationAndDie()
     {
         mesh->bPauseAnims = false;
     }
-
-    //deathDurationは、0.0fから算出した数値を後続の判定または計算に使います。
     float deathDuration = 0.0f;
     //死亡アニメーションを保持します。
     UAnimSequenceBase* deathAnimation = nullptr;
@@ -584,7 +453,6 @@ void AEnemyChara::PlayDeathAnimationAndDie()
 
     //メッシュを返します。
     USkeletalMeshComponent* mesh = GetMesh();
-    //「mesh && deathAnimation && mesh->GetSkeletalMeshAsset(」が成立するとき、GetSkeletonを呼び出します。
     if (mesh && deathAnimation && mesh->GetSkeletalMeshAsset() && deathAnimation->GetSkeleton() == mesh->GetSkeletalMeshAsset()->GetSkeleton())
     {
         mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
@@ -602,10 +470,7 @@ void AEnemyChara::PlayDeathAnimationAndDie()
 //死亡Montageの最終姿勢を固定し、消える直前の立ち上がりを防ぎます。
 void AEnemyChara::FreezeDeathPose()
 {
-    //「!m_bIsDead」が成立するとき、続けて「USkeletalMeshComponent* mesh = GetMesh()」を判定します。
     if (!m_bIsDead) { return; }
-
-    //「USkeletalMeshComponent* mesh = GetMesh()」が成立するとき、mesh->bPauseAnimsを更新します。
     if (USkeletalMeshComponent* mesh = GetMesh())
     {
         //死亡Montage終了後にIdleへ戻って一瞬立ち上がるのを防ぎます。
@@ -620,7 +485,7 @@ void AEnemyChara::Die()
     if (!m_bDefeatBroadcast)
     {
         m_bDefeatBroadcast = true;
-        OnEnemyDefeated.Broadcast(this);
+        m_onEnemyDefeated.Broadcast(this);
     }
 
     //アイテムをドロップする
@@ -635,10 +500,7 @@ void AEnemyChara::DropItem()
 {
     //ドロップ抽選に外れた場合、または生成先Worldがない場合はアイテムを生成しません。
     if (FMath::FRand() > m_regularDropProbability || !GetWorld()) { return; }
-
-        //pickupClassは、m_pPickUpClassから構築した結果を後続の処理へ渡すために使います。
         TSubclassOf<APickUpBase> pickupClass = m_pPickUpClass;
-        //「!pickupClass」が成立するとき、pickupClassを更新します。
         if (!pickupClass)
         {
             pickupClass = LoadClass<APickUpBase>(nullptr, TEXT("/Game/Blueprints/Weapons/BP_PickUp_AR.BP_PickUp_AR_C"));
@@ -654,13 +516,9 @@ void AEnemyChara::DropItem()
         const EItemType itemType = bAmmo ? (bUseARAmmo ? EItemType::EIT_ARAmmo : EItemType::EIT_Ammo) : EItemType::EIT_Health;
         //アイテム値を保持します。
         const float itemValue = bAmmo ? static_cast<float>(FMath::RandRange(bUseARAmmo ? 18 : 8, bUseARAmmo ? 32 : 15)) : 25.0f;
-
-        //spawnParametersは、Actor生成時の所有者や衝突時の生成規則を指定するために使います。
         FActorSpawnParameters spawnParameters;
         spawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-        //dropLocationは、GetActorLocation() + FVector(0.0f, 0.0f, 80.0f)から求めた空間情報を位置または向きの計算に使います。
         const FVector dropLocation = GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
-        //「APickUpBase* pickup = GetWorld()->SpawnActor<APickUpBase>(pickupClass, dropLocation, FRot…」が成立するとき、PickUpItemを呼び出します。
         if (APickUpBase* pickup = GetWorld()->SpawnActor<APickUpBase>(pickupClass, dropLocation, FRotator::ZeroRotator, spawnParameters))
         {
             pickup->PickUpItem(itemType, itemValue);
@@ -674,7 +532,6 @@ void AEnemyChara::EnableRedOutline(bool _bEnable) { SetRedOutlineColor(_bEnable)
 void AEnemyChara::SetRedOutlineColor(bool _bEnable)
 {
     m_bRedOutlineEnabled = _bEnable;
-    //「USkeletalMeshComponent* enemyMesh = GetMesh()」が成立するとき、SetRenderCustomDepthを呼び出します。
     if (USkeletalMeshComponent* enemyMesh = GetMesh())
     {
         enemyMesh->SetRenderCustomDepth(_bEnable);
@@ -688,7 +545,6 @@ void AEnemyChara::ResetNotSeenTimer()
     //アラートアウトラインのタイマーとリリースアキュムレータをリセットし、赤いアウトラインを無効化する
     m_notSeenTimer = 0.f;
     m_outlineReleaseAccumulator = 0.f;
-    //「m_bRedOutlineEnabled」が成立するとき、SetRedOutlineColorを呼び出します。
     if (m_bRedOutlineEnabled)
     {
         SetRedOutlineColor(false);
@@ -700,8 +556,6 @@ void AEnemyChara::SetSearchAssistBoosted(bool _bBoosted)
 {
     //検索アシストの強化状態を設定し、強化されている場合はアラートアウトラインのタイマーを調整する
     m_bSearchAssistBoosted = _bBoosted;
-
-    //「m_bSearchAssistBoosted」が成立するとき、Maxを呼び出します。
     if (m_bSearchAssistBoosted)
     {
         m_notSeenTimer = FMath::Max(m_notSeenTimer, FMath::Max(0.f, m_boostedNotSeenAlertTime - m_visibilityAssistCheckInterval));
@@ -715,7 +569,6 @@ bool AEnemyChara::IsClearlyVisibleToPlayer() const
     const APlayerChara* Player = GetPlayerCharacter();
     //プレイヤーコントローラーを保持します。
     APlayerController* PlayerController = Player ? Cast<APlayerController>(Player->GetController()) : nullptr;
-    //「!Player || !PlayerController」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!Player || !PlayerController) { return false; }
 
     //プレイヤーのカメラ位置と回転を取得する
@@ -726,29 +579,23 @@ bool AEnemyChara::IsClearlyVisibleToPlayer() const
 
     //ターゲット位置を計算し、プレイヤーのカメラからターゲットまでの方向と距離を計算する
     const FVector TargetLocation = GetActorLocation() + FVector(0.f, 0.f, 80.f);
-    //ToEnemyは、TargetLocation - CameraLocationから取得した参照を後続の呼び出しで使います。
     const FVector ToEnemy = TargetLocation - CameraLocation;
     //距離を保持します。
     const float Distance = ToEnemy.Size();
-    //「Distance <= 1.f」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (Distance <= 1.f) { return true; }
 
     //プレイヤーのカメラの視線方向とターゲットへの方向のドット積を計算し、視線がターゲットに向いているかどうかを判定する
     const FVector Direction = ToEnemy / Distance;
-    //「FVector::DotProduct(CameraRotation.Vector(), Direction) < m_visibilityAssistFocusDot」が成立するとき、この関数を終了します。
     if (FVector::DotProduct(CameraRotation.Vector(), Direction) < m_visibilityAssistFocusDot) { return false; }
 
     //ターゲット位置をスクリーン座標に変換し、スクリーン内に収まっているかどうかを判定する
     FVector2D ScreenPosition;
-    //「!PlayerController->ProjectWorldLocationToScreen(TargetLocation, ScreenPosition, true)」が成立するとき、この関数を終了します。
     if (!PlayerController->ProjectWorldLocationToScreen(TargetLocation, ScreenPosition, true)) { return false; }
 
     //スクリーン座標がビューポート内に収まっているかどうかを判定する
     int32 ViewportX = 0;
-    //ViewportYは、0から算出した数値を後続の判定または計算に使います。
     int32 ViewportY = 0;
     PlayerController->GetViewportSize(ViewportX, ViewportY);
-    //「ViewportX <= 0 || ViewportY <= 0 || ScreenPosition.X < 0.f || ScreenPosition.X > Viewport…」が成立するとき、この関数を終了します。
     if (ViewportX <= 0 || ViewportY <= 0 || ScreenPosition.X < 0.f || ScreenPosition.X > ViewportX || ScreenPosition.Y < 0.f ||
         ScreenPosition.Y > ViewportY)
     {
@@ -757,15 +604,14 @@ bool AEnemyChara::IsClearlyVisibleToPlayer() const
     }
 
     //プレイヤーのカメラからターゲットまでのラインをトレースし、視界が遮られていないかどうかを判定する
-    FHitResult Hit;
-    //Paramsは、Paramsの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
+    FHitResult visibilityHit;
     FCollisionQueryParams Params(SCENE_QUERY_STAT(EnemyVisibilityAssist), true, Player);
     Params.AddIgnoredActor(Player);
     //ワールドを返します。
-    const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, CameraLocation, TargetLocation, ECC_Visibility, Params);
+    const bool bBlocked = GetWorld()->LineTraceSingleByChannel(visibilityHit, CameraLocation, TargetLocation, ECC_Visibility, Params);
 
     //視界が遮られていない場合、またはヒットしたアクターが自分自身である場合、明確に見えると判定する
-    return !bBlocked || Hit.GetActor() == this;
+    return !bBlocked || visibilityHit.GetActor() == this;
 }
 
 //アラートアウトラインの更新処理を行う
@@ -776,7 +622,6 @@ void AEnemyChara::UpdateAlertOutline(float DeltaTime)
 
     //アラートアウトラインのチェック間隔を累積し、指定された間隔に達していない場合は処理を終了する
     m_visibilityAssistCheckAccumulator += DeltaTime;
-    //「m_visibilityAssistCheckAccumulator < m_visibilityAssistCheckInterval」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (m_visibilityAssistCheckAccumulator < m_visibilityAssistCheckInterval) { return; }
 
     //チェック間隔に達した場合、累積時間を取得し、累積時間をリセットする
@@ -785,12 +630,10 @@ void AEnemyChara::UpdateAlertOutline(float DeltaTime)
 
     //プレイヤーキャラクターを取得し、存在しない場合は処理を終了する
     const APlayerChara* Player = GetPlayerCharacter();
-    //「!Player」が成立するとき、Distを呼び出します。
     if (!Player) { return; }
 
     //プレイヤーとの距離を計算し、指定された最大距離を超えている場合はアラートアウトラインを無効化する
     const float Distance = FVector::Dist(GetActorLocation(), Player->GetActorLocation());
-    //「Distance > m_visibilityAssistMaxDistance」が成立するとき、m_notSeenTimerを更新します。
     if (Distance > m_visibilityAssistMaxDistance)
     {
         m_notSeenTimer = 0.f;
@@ -803,11 +646,9 @@ void AEnemyChara::UpdateAlertOutline(float DeltaTime)
     if (IsClearlyVisibleToPlayer())
     {
         m_notSeenTimer = 0.f;
-        //「m_bRedOutlineEnabled」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
         if (m_bRedOutlineEnabled)
         {
             m_outlineReleaseAccumulator += CheckDelta;
-            //「m_outlineReleaseAccumulator >= m_outlineReleaseDelay」が成立するとき、SetRedOutlineColorを呼び出します。
             if (m_outlineReleaseAccumulator >= m_outlineReleaseDelay)
             {
                 SetRedOutlineColor(false);
@@ -820,7 +661,6 @@ void AEnemyChara::UpdateAlertOutline(float DeltaTime)
     //プレイヤーから明確に見えない場合、アラートアウトラインのリリースアキュムレータをリセットし、タイマーを更新する
     m_outlineReleaseAccumulator = 0.f;
     m_notSeenTimer += CheckDelta;
-    //RequiredDelayは、m_bSearchAssistBoosted ? m_boostedNotSeenAlertTime : m_notSeenAlertTimeから算出した数値を後続の判定または計算に使います。
     const float RequiredDelay = m_bSearchAssistBoosted ? m_boostedNotSeenAlertTime : m_notSeenAlertTime;
 
     //アラートアウトラインが有効化されていない場合、指定された遅延時間を超えた場合に赤いアウトラインを有効化する
@@ -828,57 +668,4 @@ void AEnemyChara::UpdateAlertOutline(float DeltaTime)
     {
         SetRedOutlineColor(true);
     }
-}
-
-//攻撃判定の有効化/無効化を設定する
-void AEnemyChara::SetAttackCollisionEnabled(bool _bEnabled)
-{
-    //「!m_pAttackCollision」が成立するとき、SetCollisionEnabledを呼び出します。
-    if (!m_pAttackCollision) { return; }
-
-    //攻撃判定の衝突設定を更新し、オーバーラップイベントの生成を有効化/無効化する
-    m_pAttackCollision->SetCollisionEnabled(_bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
-    m_pAttackCollision->SetGenerateOverlapEvents(_bEnabled);
-}
-
-//新しい攻撃スイングのために攻撃ヒットフラグをリセットする
-void AEnemyChara::ResetAttackHitForNewSwing() { m_bAttackHitThisSwing = false; }
-
-//攻撃判定がプレイヤーと重なった場合の処理
-void AEnemyChara::OnAttackCollisionOverlap(UPrimitiveComponent* _overlappedComp, AActor* _otherActor, UPrimitiveComponent* _otherComp,
-                                           int32 _otherBodyIndex, bool _bFromSweep, const FHitResult& _sweepResult)
-{
-    //攻撃ヒットがすでに適用されている、または死亡している場合は処理を終了する
-    if (m_bAttackHitThisSwing || IsDead()) { return; }
-
-    //重なったアクターがプレイヤーキャラクターでない場合は処理を終了する
-    APlayerChara* player = Cast<APlayerChara>(_otherActor);
-    //「!player」が成立するとき、m_bAttackHitThisSwingを更新します。
-    if (!player) { return; }
-
-    //攻撃ヒットが適用されたことをフラグで記録する
-    m_bAttackHitThisSwing = true;
-    m_bHitAppliedThisAttack = true;
-    GetWorldTimerManager().ClearTimer(m_attackHitTimer);
-
-    //プレイヤーにダメージを適用する
-    UGameplayStatics::ApplyDamage(player, static_cast<float>(m_hitDamage), GetController(), this, UDamageType::StaticClass());
-
-    //ヒットイベントを通知する
-    OnEnemyAttackHit(player);
-}
-
-//攻撃ヒットイベントを通知する（通常敵は何もしない）
-void AEnemyChara::OnEnemyAttackHit(AActor* _hitActor)
-{
-    //通常敵の攻撃はアニメーションと被弾画面演出だけで伝えます。
-    //魔法的な汎用Impact VFXは世界観と接触点に合わないため表示しません。
-}
-
-//アニメーション通知からコンボ分岐を要求する（通常敵はコンボ分岐なし）
-void AEnemyChara::RequestComboBranchFromNotify()
-{
-    //通常敵はコンボ分岐なしです。
-    SetAttackCollisionEnabled(false);
-    m_bIsAttacking = false;
 }

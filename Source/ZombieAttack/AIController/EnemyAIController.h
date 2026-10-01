@@ -82,6 +82,10 @@ class ZOMBIEATTACK_API AEnemyAIController : public AAIController
 
     //ターゲットが存在するかどうかを確認する関数
     bool HasTarget() const { return IsValid(m_pSensedTarget); }
+    //発見時の咆哮が終わるまでは攻撃と移動の要求を待つ
+    bool IsAlertReactionActive() const { return m_bAlertReactionActive; }
+    //同時攻撃は二体までとし、同じ方向から仲間に重なって殴ることも避ける。
+    bool HasAttackOpening() const;
 
     //現在のターゲットを取得する関数
     AActor* GetSensedActor() const { return m_pSensedTarget.Get(); }
@@ -113,8 +117,17 @@ class ZOMBIEATTACK_API AEnemyAIController : public AAIController
     void OnTargetPerceptionUpdated(AActor* _actor, FAIStimulus _stimulus);
 
   private:
+    //仲間が振りかぶり始めた直後に同時攻撃を重ねないための開始時刻。
+    double m_lastAttackStart = -1000.0;
+    //木の陰で見失うたびに咆哮を繰り返さないための再警戒までの間隔。
+    UPROPERTY(EditDefaultsOnly, Category = "AI|Alert", meta = (ClampMin = "0.0"))
+    float m_alertRepeatDelay = 10.0f;
+    //直前に咆哮を開始した時刻。初回発見は必ず警戒動作を行う。
+    float m_lastAlertTime = -1000.0f;
+    //咆哮中に視線が切れた時、全身モーションを終了させてから探索へ戻す。
+    void CancelAlertReaction();
     //パトロールの次のポイントをスケジュールする関数
-    void ScheduleNextPatrol(float OverrideDelay = -1.f);
+    void ScheduleNextPatrol(float _overrideDelay = -1.f);
 
     //パトロールの次のポイントに移動する関数
     void MoveToNextPatrolPoint();

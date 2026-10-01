@@ -29,10 +29,9 @@ class ZOMBIEATTACK_API UWeaponCarouselWidget : public UUserWidget
     virtual void NativeConstruct() override;
 
   private:
-    //BindWidgetはBP側の名前と完全一致が必要です。
-    //WBP_WeaponCarousel側のVerticalBox名をWeaponListBoxにしてください。
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UVerticalBox> WeaponListBox;
+    //BP側のWeaponListBoxを実行時に取得して武器一覧を並べます。
+    UPROPERTY(Transient)
+    TObjectPtr<UVerticalBox> m_pWeaponListBox;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon UI", meta = (AllowPrivateAccess = "true", DisplayName = "Entry Widget Class"))
     //entryWidgetクラスをゲーム処理から参照できるように管理します。

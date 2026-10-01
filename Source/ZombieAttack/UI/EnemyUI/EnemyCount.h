@@ -20,15 +20,15 @@ class ZOMBIEATTACK_API UEnemyCount : public UUserWidget
     //NativeOnInitializedは、Widget初期化時にイベント接続と固定UI要素の準備を行います。
     virtual void NativeOnInitialized() override;
     //NativeTickは、Widgetの毎フレーム更新を受け取り、表示アニメーションを進めます。
-    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+    virtual void NativeTick(const FGeometry& _geometry, float _deltaTime) override;
 
     //敵数UIを最新のゲーム状態へ更新します。
     UFUNCTION(BlueprintCallable, Category = "Enemy Count")
-    void UpdateEnemyCountUI(int32 CurrentCount);
+    void UpdateEnemyCountUI(int32 _enemyCount);
 
     //MissionObjectiveを画面へ表示します。
     UFUNCTION(BlueprintCallable, Category = "Mission")
-    void ShowMissionObjective(int32 InitialEnemyCount);
+    void ShowMissionObjective(int32 _initialEnemyCount);
 
     //ゴール準備完了を画面へ表示します。
     UFUNCTION(BlueprintCallable, Category = "Mission")
@@ -44,7 +44,7 @@ class ZOMBIEATTACK_API UEnemyCount : public UUserWidget
     //ミッションHUDを作成します。
     void BuildMissionHUD();
     //ShowCenterMessageは、名前が示すUIを構築して画面へ表示します。
-    void ShowCenterMessage(const FText& Header, const FText& Message, float Duration);
+    void ShowCenterMessage(const FText& _header, const FText& _message, float _duration);
 
     //counterPanelを管理します。
     UPROPERTY(Transient)

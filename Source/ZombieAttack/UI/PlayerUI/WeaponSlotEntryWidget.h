@@ -35,19 +35,17 @@ class ZOMBIEATTACK_API UWeaponSlotEntryWidget : public UUserWidget
     virtual void NativeConstruct() override;
 
   private:
-    //BindWidgetはBP側の名前と完全一致が必要なため、ここだけm_を付けません。
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UBorder> SelectionBorder;
+    //BP側のSelectionBorderを実行時に取得して選択色を更新します。
+    UPROPERTY(Transient)
+    TObjectPtr<UBorder> m_pSelectionBorder;
 
     //WeaponIconをゲーム処理から参照できるように管理します。
-    UPROPERTY(meta = (BindWidget))
-    //WeaponIconをゲーム処理から参照できるように管理します。
-    TObjectPtr<UImage> WeaponIcon;
+    UPROPERTY(Transient)
+    TObjectPtr<UImage> m_pWeaponIcon;
 
     //WeaponNameTextをゲーム処理から参照できるように管理します。
-    UPROPERTY(meta = (BindWidget))
-    //WeaponNameTextをゲーム処理から参照できるように管理します。
-    TObjectPtr<UTextBlock> WeaponNameText;
+    UPROPERTY(Transient)
+    TObjectPtr<UTextBlock> m_pWeaponNameText;
 
   private:
     //武器スロットを保持します。

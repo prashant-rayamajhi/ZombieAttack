@@ -13,7 +13,6 @@ void UAnimNotify_HealComplete::Notify(USkeletalMeshComponent* _meshComp, UAnimSe
 
     //メッシュコンポーネントの所有者をAPlayerChara型にキャスト
     APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner());
-    //「!player」が成立するとき、ApplyHealを呼び出します。
     if (!player) { return; }
 
     //プレイヤーの回復処理を実行

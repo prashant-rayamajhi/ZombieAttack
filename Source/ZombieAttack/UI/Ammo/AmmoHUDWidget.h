@@ -32,8 +32,6 @@ class ZOMBIEATTACK_API UAmmoHUDWidget : public UUserWidget
     //弾薬を更新します。
     UFUNCTION()
     void UpdateAmmo();
-
-    //UnbindWeaponは、UnbindWeaponの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void UnbindWeapon();
 
   private:

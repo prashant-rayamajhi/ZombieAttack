@@ -12,7 +12,6 @@ AZombieAttackGameMode::AZombieAttackGameMode()
 {
     //PlayerClassは、名前が示す動作を開始するための初期状態を整えます。
     static ConstructorHelpers::FClassFinder<APlayerChara> PlayerClass(TEXT("/Game/Blueprints/Player/Actor/BP_PlayerChara"));
-    //「PlayerClass.Succeeded()」が成立するとき、DefaultPawnClassを更新します。
     if (PlayerClass.Succeeded())
     {
         DefaultPawnClass = PlayerClass.Class;
@@ -24,8 +23,6 @@ void AZombieAttackGameMode::StartPlay()
 {
     //GameMode共通の開始処理を先に完了させ、プレイヤーとレベルActorを利用可能にします。
     Super::StartPlay();
-
-    //GameplayMusicは、本編で再生するBGMアセットへアクセスするために使います。
     USoundBase* GameplayMusic = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/Music/S_BGM_TheHunt.S_BGM_TheHunt"));
     //BGMアセットを読み込めた場合だけ、ゲームプレイ中の2D音源を生成します。
     if (GameplayMusic)
@@ -39,8 +36,6 @@ void AZombieAttackGameMode::HandleStartingNewPlayer_Implementation(APlayerContro
 {
     //参加したプレイヤーを本編用Pawnへ割り当てます。
     Super::HandleStartingNewPlayer_Implementation(_newPlayer);
-
-    //「!_newPlayer」が成立するとき、ResetIgnoreMoveInputを呼び出します。
     if (!_newPlayer) { return; }
 
     //タイトル画面のUIOnly状態や入力無視状態を本編へ持ち越さないようにします。

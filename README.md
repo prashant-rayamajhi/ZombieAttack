@@ -1,151 +1,201 @@
 # Zombie Attack
 
-Unreal Engine 5で制作した三人称視点のゾンビアクションゲームです。プレイヤーはPistol、AR、Knifeを切り替えながら通常敵・中間ボス・ラストボスと戦い、すべての敵を倒してゴールを目指します。
+### 射撃・アニメーション・敵の判断をつなげた、三人称ゾンビアクション
+
+Pistol・AR・Knifeを切り替え、通常敵・中間ボス・ラストボスを倒して脱出する個人制作ゲームです。**C++によるプレイヤー制御、敵AI、攻撃判定とアニメーションの同期**を中心に制作しました。
+
+狙った場所へ撃つこと、手足が届く瞬間に攻撃が当たること、敵が一斉に同じ行動を取らないことを重視しています。ゲームルールはC++で管理し、素材や演出の設定はUnreal Editor・Blueprint側で調整する構成です。
+
+**[プレイ動画](https://drive.google.com/file/d/1ezazuAM-6t2Oc3je9asIbnAP9bNGCkFo/view) · [担当範囲](#担当範囲) · [技術的に工夫した点](#技術的に工夫した点) · [問題と改善](#発生した問題と改善内容) · [主要コード](#特に見てほしいコード) · [検証](#検証と公開範囲)**
 
 ## 基本情報
 
-- 作品名：Zombie Attack
-- 制作形態：個人制作
-- 制作期間：約1.5か月（2025年9月22日〜2025年11月7日）
-- 使用エンジン：Unreal Engine 5.7
-- 使用言語：C++
-- 対応操作：キーボード・マウス、XInputコントローラー
-- プレイ動画：[Google Driveで視聴](https://drive.google.com/file/d/1ezazuAM-6t2Oc3je9asIbnAP9bNGCkFo/view)
+| 項目 | 内容 |
+| --- | --- |
+| ジャンル | 三人称視点のゾンビアクション |
+| 制作形態 | 個人制作 |
+| 制作期間 | 約1.5か月（2025年9月22日〜2025年11月7日） |
+| 継続改善 | 制作期間後も調整を継続。本READMEは2026年10月1日の公開更新に対応 |
+| 使用エンジン | Unreal Engine 5.7（ローカル検証：5.7.4） |
+| 使用言語・環境 | C++、Visual Studio 2022、Windows |
+| 主な使用技術 | AI Perception、Navigation System、AnimInstance、AnimMontage、AnimNotify、UMG、Niagara |
+| 対応操作 | キーボード・マウス、XInputコントローラー |
+| 公開内容 | C++ソース、設定、プロジェクト定義、検証・アセット調整用スクリプト |
+
+プレイ動画と最新ソースでは、UIや演出、操作仕様が異なる場合があります。
 
 ## 担当範囲
 
-- プレイヤーの移動、カメラ、ジャンプ、体力、回復、死亡処理
-- Pistol、AR、Knifeの切り替え、射撃、近接攻撃、リロード
-- ARの構えから射撃までの状態遷移とアニメーション同期
-- 通常敵の巡回、知覚、追跡、捜索、攻撃
-- 中間ボス・ラストボスのUtility AIと攻撃パターン
-- AnimNotifyを利用した攻撃判定、足音、リロード、エフェクトの同期
-- HP、弾数、武器、敵数、クロスヘアー等のインゲームUI
-- Game Start、Game Clear、Game Overの画面遷移
-- イントロカットシーン、敵生成、ゴール、ゲーム進行管理
-- キーボード・マウスとXInputコントローラーへの対応
+### ゲーム本体の実装
 
-## プレイヤー制御
+- プレイヤーの移動、後退、カメラ、ジャンプ、体力、回復、死亡
+- 三種類の武器、射撃、近接攻撃、リロード、武器切り替え
+- ARの構えと発射条件、行動終了直前の入力受付
+- 通常敵の巡回、知覚、追跡、捜索、回り込み、集団での攻撃調整
+- 中間ボス・ラストボスの行動評価、攻撃パターン、射程判定
+- 攻撃区間の接触判定、着弾・撃破のフィードバック
+- 敵生成、生存数の管理、ゴール開放、ゲーム進行
+- HP・弾薬・武器・敵数のHUD、三つのメニュー画面、導入カットシーン
 
-プレイヤー処理は、一つの巨大な実装へ集約せず、変更理由に合わせて分割しています。
+### 素材との組み合わせ・調整
 
-- `PlayerCharaMovement.cpp`：移動、旋回、ジャンプ、カメラ追従
-- `PlayerCharaCombat.cpp`：武器切り替え、攻撃、エイム、リロード
-- `PlayerCharaVitals.cpp`：ダメージ、回復、死亡、ヒットストップ
-- `PlayerCharaUI.cpp`：クロスヘアーとHUD表示
-- `Components/`：プレイヤー音声、ARアニメーション、命中フィードバック
-
-ARは、入力直後に弾を発射せず、`Inactive → Raising → Ready`の状態を経てから射撃します。`AnimNotify_RifleAimReady`を構え完了の基準にすることで、Idle姿勢のまま発射する問題を防いでいます。
-
-## 敵AI
-
-通常敵はAI Perceptionと状態管理を使用し、巡回、発見、追跡、捜索、攻撃を切り替えます。攻撃開始時に移動要求を止め、攻撃終了通知を受けてから追跡を再開することで、攻撃モーション中の滑り移動を抑えています。
-
-ボスは固定順や単純なランダムではなく、距離、視線、体力、直近の被ダメージ、行動履歴などを評価するUtility AIを使用します。同じ技には履歴ペナルティを与え、中間ボスとラストボスで評価の重みを変更できる設計です。
-
-## ゲームシステム・演出
-
-- 敵の生成と生存数の集約
-- 全敵撃破後のゴール開放とゲームクリア判定
-- カットシーン中のHUD・クロスヘアー非表示
-- HP、装填弾数、予備弾数、武器、敵数の表示
-- 30秒以上敵を発見できない場合の方向案内
-- 着弾エフェクト、撃破時のクロスヘアー反応、短いヒットストップ
-- Game Start、InGame、Game Clear、Game Overごとの画面とBGM制御
+モデル、アニメーション、音源などの外部素材を組み込み、再生条件、照明、エフェクトの生成位置、UIとの接続を調整しています。**外部素材そのものの制作と、ゲームへ組み込む実装は区別しています。**
 
 ## 技術的に工夫した点
 
-### 1. プレイヤー処理の責務分割
+### 1. 射撃入力・構え・命中判定を分ける
 
-1000行を超えていたプレイヤー実装を、単に別ファイルへ移すだけではなく、Movement、Combat、Vitals、UIへ分割しました。独立性が高い音声、ARアニメーション、戦闘フィードバックはActorComponentとして分離しています。
+ARは攻撃入力を受けても、構えが完了するまで発射を保留します。専用コンポーネントが構えの状態を管理し、Notifyと発射可能条件を照合して、Idle姿勢のまま撃つ状態を防ぎます。
 
-### 2. ARの射撃状態とアニメーションの同期
+照準はカメラ中央から求めますが、**ダメージを決める射線は銃口から再計算**します。壁と敵を別々に調べて手前の衝突を採用し、カメラから敵が見えていても銃口側が遮られていれば壁に当たります。銃身が壁を突き抜けた場合は、体から銃口までの判定でも遮蔽物を確認します。
 
-攻撃入力を一度保留し、構え完了のAnimNotifyを受けてから発射します。連射中はAim Ready状態を維持し、入力終了、弾切れ、武器変更時に状態を解除します。
+即時命中を使う武器では、表示用の弾から二重にダメージを与えず、着弾地点までの距離に合わせて表示時間を制限しています。
 
-### 3. 通常敵とボスで異なる判断方式
+主要コード：[`PlayerCharaCombat.cpp`](Source/ZombieAttack/Player/PlayerCharaCombat.cpp)、[`PlayerRifleAnimationComponent.cpp`](Source/ZombieAttack/Components/RifleAnimation/PlayerRifleAnimationComponent.cpp)、[`WeaponAimTrace.cpp`](Source/ZombieAttack/Weapon/WeaponAimTrace.cpp)
 
-通常敵は目的が明確な状態遷移、ボスは複数行動を採点するUtility AIとして実装しました。敵の役割に合わせて判断方式を使い分けています。
+### 2. 集団の判断と、一体ごとの攻撃を分ける
 
-### 4. AnimNotifyを基準にした判定
+通常敵はAI Perceptionによる発見と、巡回・追跡・捜索・攻撃の状態を組み合わせています。接近ではプレイヤーの周囲へ向かう候補位置を使い、複数体が同じ位置へ押し寄せる状況を抑えます。
 
-タイマーでモンタージュ時間を推測せず、実際に武器や手が当たるフレームで攻撃判定を発生させます。リロード完了や足音も同じ考え方で同期しています。
+攻撃開始には周辺の敵の状態と開始間隔を考慮します。発見時も、近くの雑魚敵は一体が咆哮し、通知を受けた仲間は追跡へ移ります。咆哮の再生速度を変える際は停止時間も合わせ、動作途中で滑り始めないようにしています。
 
-### 5. C++とBlueprintの役割分担
+ボスは距離、視線、プレイヤーの移動・回復・リロード、直近の被ダメージ、行動履歴から候補を採点します。射程条件を満たす候補を選び、同じ技の反復にはペナルティを与えます。中間ボスとラストボスで評価の重みを変えています。これは**ゲーム内の条件と重みによる行動選択**であり、機械学習による判断ではありません。
 
-状態遷移、ダメージ、弾数、AI判断、画面遷移などのゲームルールはC++で管理し、Montage、Socket、Widget、画像、音、エフェクト等はEditor・Blueprint側で調整できる構成を目指しました。
+主要コード：[`EnemyAIController.cpp`](Source/ZombieAttack/AIController/EnemyAIController.cpp)、[`EnemyCharaCombat.cpp`](Source/ZombieAttack/Enemy/EnemyCharaCombat.cpp)、[`BossUtilityAIComponent.cpp`](Source/ZombieAttack/AIController/BossUtilityAIComponent.cpp)
 
-## 発生した問題と解決方法
+### 3. アニメーションの姿勢と攻撃区間を一致させる
 
-### ARがIdle姿勢のまま発射される
+通常の体の衝突と、攻撃によるダメージ判定を分離しています。攻撃用Notifyで受付区間を開閉し、その間だけ手足の移動に沿って判定します。一振りの中で同じ相手へ繰り返しダメージが入らないよう、命中済みの管理も行います。
 
-発射処理が入力と直接つながっていたことが原因でした。ARの状態を列挙型で管理し、構え完了Notifyを受けるまで発射要求を保留する構成へ変更しました。
+敵の移動姿勢はC++のAnimInstanceでIdle・Walk・Runを切り替え、実際の移動速度から再生速度を求めます。姿勢の並列評価中にActorへ直接アクセスしないよう、必要な速度はゲームスレッド側で取得します。
 
-### 敵が攻撃アニメーション中に滑る
+Mixamo素材の最上位ボーンが腰の場合、ルートを一律に固定するとパンチのひねりや屈伸まで失われます。そこで腰の回転と上下動は残し、カプセルから大きく離れる水平移動だけを制限しました。
 
-AIの移動要求が残った状態でMontageを再生していました。攻撃開始時に移動を停止し、終了通知後に追跡を再開するよう責務を整理しました。
+主要コード：[`EnemyAnimInstance.cpp`](Source/ZombieAttack/Animation/Enemy/EnemyAnimInstance.cpp)、[`EnemyAttackTraceComponent.cpp`](Source/ZombieAttack/Enemy/Components/EnemyAttackTraceComponent.cpp)、[`AnimNotifyState_EnemyAttackCollision.cpp`](Source/ZombieAttack/Animation/AnimNotifyState_EnemyAttackCollision.cpp)
 
-### ボスが射程外で近接攻撃を選ぶ
+### 4. 入力の取りこぼしと演出による操作の重さを抑える
 
-行動候補の選択と実際の攻撃範囲が一致していませんでした。Decision Contextへ距離を含め、攻撃ごとの有効範囲を満たした候補だけを採点するよう見直しました。
+リロード、武器切替、発射間隔の終了直前に押した攻撃を、**0.18秒・一回分だけ予約**します。古い入力や別の武器への持ち越しは無効にし、ARはボタンを離した時点で予約を取り消します。銃自身でも発射間隔を確認し、連打や重複した呼び出しで設定以上に発砲しないようにしました。
 
-### カメラ照準と銃口方向が一致しない
+撃破時の短いヒットストップは、連続撃破で延長しません。再発動まで実時間0.35秒の間隔を空け、停止中のカメラ入力は時間倍率を補償します。画面遷移や死亡で終了タイマーが消えても、元の時間倍率へ復帰できるようにしています。
 
-カメラ中央から照準点を求め、その地点へ銃口から向ける二段階の計算にしました。AR攻撃中だけキャラクターの視覚的な向きを画面中央へ補正し、他武器の移動挙動へ影響しないよう限定しています。
+主要コード：[`AttackInputBuffer.h`](Source/ZombieAttack/Components/Combat/AttackInputBuffer.h)、[`GunWeapon.cpp`](Source/ZombieAttack/Weapon/GunWeapon.cpp)、[`PlayerCharaVitals.cpp`](Source/ZombieAttack/Player/PlayerCharaVitals.cpp)
 
-## 特に見てほしいC++コード
+### 5. 進行・案内・演出を同じゲーム状態へつなぐ
 
-### [PlayerCharaCombat.cpp](Source/ZombieAttack/Player/PlayerCharaCombat.cpp)
+全敵撃破をゴール開放と出口案内へ接続しています。敵を見失った場合の案内は、回転する三角だけでなく対象の種類・距離・左右や背後の方向を表示します。
 
-武器切り替え、攻撃、リロード、ARの構えと連射を実装しています。ARの入力、状態、AnimNotify、発射条件を分離し、構えが完了する前の発射を防いでいます。
+導入カットシーンはゴールから脅威の強い敵、最後にプレイヤーへつなぐ構成です。再生中はHUDを隠し、終了後にフェード表示します。クロスヘアは登場演出から外しています。
 
-### [PlayerRifleAnimationComponent.cpp](Source/ZombieAttack/Components/RifleAnimation/PlayerRifleAnimationComponent.cpp)
+スタート・クリア・オーバーは本編のプレイヤーと森林素材を使う3D背景とし、人物用のスポットライトを追加しました。HUDでは装填弾と予備弾を二重円で表し、装填弾が少なくなると数字の色を変えます。
 
-AR専用のアニメーション状態をPlayer本体から分離したComponentです。Montageの開始、Aim Readyへの移行、終了処理を一か所にまとめています。
+主要コード：[`IntroCutsceneDirector.cpp`](Source/ZombieAttack/Cutscene/IntroCutsceneDirector.cpp)、[`GameFlowScene.cpp`](Source/ZombieAttack/UI/GameFlow/GameFlowScene.cpp)、[`EnemyLocatorWidget.cpp`](Source/ZombieAttack/UI/EnemyUI/EnemyLocatorWidget.cpp)
 
-### [EnemyAIController.cpp](Source/ZombieAttack/AIController/EnemyAIController.cpp)
+## 発生した問題と改善内容
 
-通常敵の知覚、巡回、追跡、捜索、攻撃状態を管理します。NavMeshへの投影、回り込み候補、攻撃中の移動停止を扱っています。
+| 問題 | 着目した原因・条件 | 実装した対応 |
+| --- | --- | --- |
+| ARが構える前に発射される | 入力と発射条件、姿勢の準備が一致しない | 専用状態管理と構え完了通知で発射を制限 |
+| カメラから見える敵へ壁越しに命中する | 敵を優先する照準判定だけでダメージを確定 | 壁との前後比較、銃口と銃身側の遮蔽判定を追加 |
+| 雑魚敵が同時に咆哮・攻撃する | 集団への通知が同じ行動開始につながる | 近隣の咆哮を一体へ限定し、攻撃開始の間隔を調整 |
+| 敵の攻撃姿勢が崩れる・滑る | 腰のルート固定と移動要求、攻撃再生の競合 | 姿勢評価と移動停止を整理し、接触判定を攻撃区間へ限定 |
+| 後退アニメーションが停止し、足運びと速度が合わない | ループ設定と移動速度・再生倍率の整合 | ループを明示し、接地中の足の速度を基準に後退を調整 |
+| 行動終了直前の射撃入力が失われる | 操作不可中の入力をすべて破棄していた | 期限と装備番号を持つ一回分の入力予約を追加 |
+| 連続撃破で操作が重く感じられる | ヒットストップの延長とカメラ入力への時間倍率 | 再発動間隔、カメラ入力補償、終了時の復帰処理を追加 |
 
-### [BossUtilityAIComponent.cpp](Source/ZombieAttack/AIController/BossUtilityAIComponent.cpp)
+上記は問題に対して実装した対応です。すべての配置や操作条件で解消を確認したという意味ではなく、検証範囲は末尾に記載しています。
 
-ボスの戦況をDecision Contextへまとめ、候補行動を採点して選択します。行動履歴による反復ペナルティと、ボス種類ごとの重み調整を実装しています。
+## 戦闘処理の構成
 
-### [GunWeapon.cpp](Source/ZombieAttack/Weapon/GunWeapon.cpp)
+```mermaid
+flowchart LR
+    Input[操作入力] --> Player[PlayerChara]
+    Player --> Buffer[短い攻撃入力の予約]
+    Buffer --> Player
+    Player --> Rifle[ARの構え状態]
+    Rifle --> Weapon[GunWeapon / MeleeWeapon]
+    Weapon --> Hit[射線・接触判定]
+    Perception[知覚・仲間からの通知] --> EnemyAI[EnemyAIController]
+    EnemyAI --> Enemy[EnemyChara]
+    Utility[ボス行動の評価] --> Boss[BossChara]
+    Enemy --> Anim[アニメーション・攻撃区間]
+    Boss --> Anim
+    Anim --> Hit
+    Hit --> Feedback[ダメージ・命中・撃破通知]
+    Feedback --> HUD[HP・弾薬・敵数・ゴール]
+```
 
-カメラ中央から照準点を求め、ダメージ、銃口エフェクト、着弾エフェクトを処理します。三人称視点でカメラと銃口の位置が異なる問題を考慮しています。
+処理の役割と通知の流れを示す概念図です。継承関係や全関数の呼び出しを網羅した図ではありません。
+
+プレイヤーのMovement・Combat・Vitals・UI、敵とボスのCombat・Effectsは、**同じクラスの実装を用途別のcppへ分けたもの**です。一方、ARアニメーション、音声、命中フィードバック、敵の攻撃追跡はコンポーネントとして分離しています。`AttackInputBuffer`は短い予約情報を扱う構造体です。
+
+## 特に見てほしいコード
+
+最初は次の順に読むと、入力から戦闘結果までを追えます。
+
+| 順番 | ファイル | 確認してほしい処理 |
+| --- | --- | --- |
+| 1 | [PlayerCharaCombat.cpp](Source/ZombieAttack/Player/PlayerCharaCombat.cpp) | 操作の受付、入力予約、ARの構え待ち、リロードとの競合防止 |
+| 2 | [GunWeapon.cpp](Source/ZombieAttack/Weapon/GunWeapon.cpp) | 銃口の命中判定、二重ダメージ防止、発射間隔。射線比較は[WeaponAimTrace.cpp](Source/ZombieAttack/Weapon/WeaponAimTrace.cpp) |
+| 3 | [EnemyAIController.cpp](Source/ZombieAttack/AIController/EnemyAIController.cpp) | 知覚から追跡・捜索への遷移、集団への通知、回り込み |
+| 4 | [BossUtilityAIComponent.cpp](Source/ZombieAttack/AIController/BossUtilityAIComponent.cpp) | 状況の集約、攻撃候補の評価、行動履歴による反復抑制 |
+| 5 | [EnemyCharaCombat.cpp](Source/ZombieAttack/Enemy/EnemyCharaCombat.cpp) | 攻撃開始条件、手足の接触区間、命中管理。姿勢評価は[EnemyAnimInstance.cpp](Source/ZombieAttack/Animation/Enemy/EnemyAnimInstance.cpp) |
+
+<details>
+<summary>リポジトリ構成を開く</summary>
+
+```text
+Source/ZombieAttack/
+├─ Player/          操作・移動・戦闘・体力・HUDとの接続
+├─ Weapon/          武器・射線判定
+├─ Bullet/          弾の移動・衝突
+├─ Enemy/           通常敵・生成・攻撃判定
+│  ├─ BossChara/    ボスの行動・攻撃・エフェクト
+│  └─ Components/   姿勢更新後の接触判定
+├─ AIController/    知覚・追跡・集団行動・ボス行動評価
+├─ Animation/       プレイヤー・敵の姿勢評価とNotify
+├─ Components/      入力予約・音声・AR姿勢・命中演出
+├─ UI/              HUD・メニュー・案内
+├─ Cutscene/        導入演出とHUDの復帰
+├─ Goal/            脱出地点の開放
+├─ Editor/          既存アセットの設定補助
+└─ Tests/           Unreal Automationによる検証
+Config/             入力・画面・パッケージ設定
+Tools/              アセット検査・調整・検証画像の整理
+```
+
+`Tools`には元プロジェクトのアセットを書き換えるスクリプトも含まれます。汎用ツールではなく、対象パスと設定値を確認して使用する保守用コードです。
+
+</details>
 
 ## 操作方法
 
-### コントローラー
+| 操作 | キーボード・マウス | コントローラー（XInput表記） |
+| --- | --- | --- |
+| 移動 | W / A / S / D | 左スティック |
+| カメラ | マウス移動 | 右スティック |
+| 攻撃・射撃 | 左クリック | RT |
+| エイム | 右クリック長押し | LT |
+| リロード | R | X |
+| ジャンプ | Space | A |
+| 回復 | H | Y または十字キー下 |
+| Pistol / AR / Knife | 1 / 2 / 3 | 十字キー左 / 上 / 右 |
+| 武器の順送り | マウスホイール | LB / RB |
 
-- 移動：左スティック
-- カメラ操作：右スティック
-- 攻撃／射撃：RT
-- エイム：LT
-- リロード：X
-- ジャンプ：A
-- 回復：Y またはD-pad下
-- Pistol／AR／Knife：D-pad左／上／右
-- 前／次の武器：LB／RB
+ARは入手後に使用できます。S入力では正面を向いたまま後退します。
 
-### キーボード・マウス
+## 検証と公開範囲
 
-- 移動：W／A／S／D
-- カメラ操作：マウス移動
-- 攻撃／射撃：左クリック
-- エイム：右クリック長押し
-- リロード：R
-- ジャンプ：Space
-- 回復：H
-- Pistol／AR／Knife：1／2／3
-- 武器を順番に切り替え：マウスホイール
+2026年9月27日のローカル環境では、Unreal Engine 5.7.4のDevelopment EditorビルドでUHT・コンパイル・リンクの成功を確認しています。直近の操作改善では、次の5件の自動テストが成功しました。
 
-## プロジェクトの確認方法
+- `AttackBuffer`：先行入力の期限、一回限りの消費、別装備・解除後の取消
+- `BackwardMovement`：後退方向、符号付き速度、アニメーションの周回
+- `KillStopRecovery`：連続撃破、停止中のカメラ入力、退出時の時間倍率復帰
+- `MuzzleOcclusion`：壁の背後の敵、カメラと銃口の遮蔽差
+- `PistolCadence`：実際のピストルBPでの弾消費、同一フレーム連打、発射待ちの解除
 
-このPublic版は、ライセンス未確認のアセットを含む`Content`を除外したコード閲覧用です。
+検証コードは[`Tests/`](Source/ZombieAttack/Tests/)に含めています。敵の戦闘遷移や集団行動のテスト、メニュー・照明の描画確認も行っていますが、**最新変更を含む手動での全編プレイ、HUD演出の全場面確認、Shipping版の再検証は未完了**です。描画なしで実行したテストは、画面の見た目の確認とは区別しています。
 
-1. `Source/ZombieAttack/`からC++実装を確認します。
-2. `Config/`から入力とパッケージ設定を確認します。
-3. 完全版をローカルで起動する場合は、制作者が保持する非公開の`Content`を戻し、Unreal Engine 5.7で`ZombieAttack.uproject`を開きます。
-4. C++プロジェクトファイルを生成し、Development Editor構成でビルドします。
+このリポジトリはコード閲覧用です。`Source`、`Config`、プロジェクト定義、保守用スクリプトを公開し、`Content`、外部素材、ビルド成果物、キャッシュ、ローカルの検証ログは含めていません。アセットの再配布範囲は従来から変更していません。
+
+ローカルの完全版を確認する場合は、対応するContentを揃え、Unreal Engine 5.7で`ZombieAttack.uproject`のプロジェクトファイルを生成し、`ZombieAttackEditor / Development Editor / Win64`をビルドします。アセット依存のテストも元プロジェクトのContentが必要です。

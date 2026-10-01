@@ -12,6 +12,9 @@ class ZOMBIEATTACK_API UAnimNotifyState_EnemyAttackCollision : public UAnimNotif
     GENERATED_BODY()
 
   public:
+    //パンチはRightHand、蹴りはRightFootなど、接触する骨をモンタージュごとに指定する。
+    UPROPERTY(EditAnywhere, Category = "Combat")
+    FName m_contactBone = TEXT("RightHand");
     //アニメーション通知が開始されたときに呼び出される関数
     virtual void NotifyBegin(USkeletalMeshComponent* _meshComp, UAnimSequenceBase* _animation, float _totalDuration,
                              //overrideをゲーム処理から参照できるように管理します。

@@ -13,7 +13,6 @@ void UAnimNotify_UnlockMovement::Notify(USkeletalMeshComponent* _meshComp, UAnim
 
     //メッシュコンポーネントの所有者をAPlayerChara型にキャスト
     APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner());
-    //「!player」が成立するとき、UnlockMovementByAnimationを呼び出します。
     if (!player) { return; }
 
     //プレイヤーの移動をアニメーションによって解除する

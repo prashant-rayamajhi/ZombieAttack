@@ -2,7 +2,7 @@
 #include "ZombieAttack/Weapon/WeaponBase.h"
 
 //コンストラクタ
-ABaseCharacter::ABaseCharacter() : m_pCurrentWeapon(nullptr), m_MaxHp(100.f), m_Hp(100.f), m_Damage(10.f), m_bDeathEventBroadcast(false)
+ABaseCharacter::ABaseCharacter() : m_pCurrentWeapon(nullptr), m_maxHp(100.f), m_hp(100.f), m_damage(10.f), m_bDeathEventBroadcast(false)
 {
     //Tickを無効化
     PrimaryActorTick.bCanEverTick = false;
@@ -15,14 +15,13 @@ void ABaseCharacter::BeginPlay()
     Super::BeginPlay();
 
     //最大HPを1以上に制限し、現在のHPを最大HPの範囲内にクランプする
-    m_MaxHp = FMath::Max(1.f, m_MaxHp);
-    m_Hp = FMath::Clamp(m_Hp, 0.f, m_MaxHp);
+    m_maxHp = FMath::Max(1.f, m_maxHp);
+    m_hp = FMath::Clamp(m_hp, 0.f, m_maxHp);
 }
 
 //ダメージを受けたときの処理
 float ABaseCharacter::TakeDamage(float _damageAmount, const FDamageEvent& _damageEvent, AController* _eventInstigator, AActor* _damageCauser)
 {
-    //「_damageAmount <= 0.f」が成立するとき、この関数を終了します。
     if (_damageAmount <= 0.f) { return 0.f; }
 
     return FMath::Max(0.f, Super::TakeDamage(_damageAmount, _damageEvent, _eventInstigator, _damageCauser));
@@ -46,7 +45,7 @@ void ABaseCharacter::BroadcastDeathOnce()
 
     //死亡イベントをブロードキャストする
     m_bDeathEventBroadcast = true;
-    OnCharacterDied.Broadcast(this);
+    m_onCharacterDied.Broadcast(this);
 }
 
 //死亡処理

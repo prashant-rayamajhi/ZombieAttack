@@ -26,6 +26,7 @@ class UNiagaraSystem;
 class UNiagaraComponent;
 //UEnemyHitFeedbackComponentは、ポインターまたは参照の型解決に必要な宣言だけを先行して用意します。
 class UEnemyHitFeedbackComponent;
+class UAnimSequence;
 
 //デリゲート宣言
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnHealthChanged);
@@ -55,6 +56,25 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     //コンストラクタ
     AEnemyChara();
 
+    //移動評価が使う敵種別の姿勢を返す
+    UAnimSequence* GetIdleAnimation() const { return m_idleAnimation; }
+    UAnimSequence* GetWalkAnimation() const { return m_walkAnimation; }
+    UAnimSequence* GetRunAnimation() const { return m_runAnimation; }
+    //初回発見時の咆哮を再生し、移動を止める秒数を返す
+    float PlayAlertAnimation();
+    //壁、高低差、背後への空振りを除外して近接攻撃の届く範囲を判定する
+    bool CanHitPlayer(float _range, float _minFacing = 0.15f) const;
+    //通知に指定した手足へ判定を付け、存在しない骨なら判定を無効にする。
+    bool PrepareAttackContact(FName _bone);
+    //今回の攻撃で使う手足の位置をエフェクトと命中判定で共有する。
+    FVector GetAttackContactLocation() const;
+    //有効な攻撃区間で手足が通過した範囲を調べ、一振りにつき一度だけ命中を通知する。
+    void TraceAttackContact();
+    //生成順に依存せず、コントローラーが発見したプレイヤーを攻撃対象へ渡す。
+    void SetCombatTarget(APlayerChara* _player) { m_pPlayerChara = _player; }
+    //視覚で追跡している相手を攻撃とエフェクトの命中判定でも使う。
+    APlayerChara* GetCombatTarget() const { return m_pPlayerChara; }
+
     //毎フレーム呼ばれる関数
     virtual void Tick(float _deltaTime) override;
 
@@ -65,19 +85,19 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
 
     //敵のHPが変化したときに呼ばれるデリゲート
     UPROPERTY(BlueprintAssignable, Category = "Health")
-    FOnHealthChanged OnHealthChanged;
+    FOnHealthChanged m_onHealthChanged;
 
     //敵が倒されたときに呼ばれるデリゲート
     UPROPERTY(BlueprintAssignable, Category = "Enemy")
-    FOnEnemyDefeated OnEnemyDefeated;
+    FOnEnemyDefeated m_onEnemyDefeated;
 
     //HPを取得する関数
     UFUNCTION(BlueprintPure, Category = "Health")
-    float GetHP() const { return m_Hp; }
+    float GetHP() const { return m_hp; }
 
     //最大HPを取得する関数
     UFUNCTION(BlueprintPure, Category = "Health")
-    float GetMaxHP() const { return m_MaxHp; }
+    float GetMaxHP() const { return m_maxHp; }
 
     //攻撃中かどうかを取得する関数
     UFUNCTION(BlueprintPure, Category = "Animation")
@@ -98,6 +118,8 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     //攻撃範囲を取得する関数
     UFUNCTION(BlueprintPure, Category = "AI|Combat")
     float GetDesiredCombatRange() const { return FMath::Max(140.f, m_attackRange + 80.f); }
+    //手足の接触攻撃を始めるカプセル間の距離を、行動選択と共通にする。
+    float GetContactAttackRange() const { return m_attackRange; }
 
     //現在の攻撃判定を一度だけ適用します。
     UFUNCTION(BlueprintCallable, Category = "Combat")
@@ -109,7 +131,7 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
 
     //攻撃Collision有効をゲーム内の対象へ反映します。
     UFUNCTION(BlueprintCallable, Category = "Attack")
-    void SetAttackCollisionEnabled(bool _bEnabled);
+    virtual void SetAttackCollisionEnabled(bool _bEnabled);
 
     //攻撃HitForNewSwingを解除します。
     UFUNCTION(BlueprintCallable, Category = "Attack")
@@ -151,6 +173,26 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     bool IsRedOutlineEnabled() const { return m_bRedOutlineEnabled; }
 
   protected:
+    //通常敵とボスが同じ攻撃中フラグを使い、移動と通知の受付条件を揃える
+    void SetCombatActionActive(bool _bActive) { m_bIsAttacking = _bActive; }
+    //派生ボスのタイマーを停止してから共通の死亡姿勢へ切り替える
+    virtual void PlayDeathAnimationAndDie();
+    //派生クラスが同じSkeletonのIdle、Walk、Run、Alertをまとめて設定する
+    void SetLocomotionAssets(const TCHAR* _folder, const TCHAR* _idle, const TCHAR* _walk, const TCHAR* _run, const TCHAR* _alert);
+    //旧AnimBPの状態遷移に依存しない共通アニメーションを開始する
+    void InitializeEnemyAnimation();
+    //各敵の停止姿勢
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
+    TObjectPtr<UAnimSequence> m_idleAnimation;
+    //毎秒125cmを基準とする前進姿勢
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
+    TObjectPtr<UAnimSequence> m_walkAnimation;
+    //毎秒500cmを基準とする走行姿勢
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
+    TObjectPtr<UAnimSequence> m_runAnimation;
+    //プレイヤーを初めて見つけた時に一度だけ再生する姿勢
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
+    TObjectPtr<UAnimSequence> m_alertAnimation;
     //現在の敵Skeletonで安全に再生できるMontageか確認します。
     bool IsMontageCompatible(const UAnimMontage* _montage) const;
 
@@ -167,7 +209,7 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     virtual void DropItem();
 
     //敵のサウンドを再生する関数
-    void PlayEnemySound(USoundBase* Sound, float VolumeMultiplier = 1.f) const;
+    void PlayEnemySound(USoundBase* _pSound, float _volumeMultiplier = 1.f) const;
     //プレイヤーキャラクターを返します。
     APlayerChara* GetPlayerCharacter() const;
 
@@ -182,6 +224,12 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     //攻撃時のアニメーションモンタージュ
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
     TObjectPtr<UAnimMontage> m_pAttackMontage;
+    //通常敵の攻撃候補。同じSkeletonと接触通知を持つモンタージュだけを選ぶ。
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    TArray<TObjectPtr<UAnimMontage>> m_attackChoices;
+    //終了通知が別のモンタージュと混ざらないよう、今回再生した攻撃を保持する。
+    UPROPERTY(Transient)
+    TObjectPtr<UAnimMontage> m_activeAttack;
 
     //ドロップするアイテムのクラス
     UPROPERTY(EditAnywhere, Category = "Drop")
@@ -272,10 +320,6 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     UPROPERTY(EditAnywhere, Category = "Combat", meta = (ClampMin = "0.0"))
     float m_attackInterval;
 
-    //攻撃がヒットしなかった場合のフォールバック時間
-    UPROPERTY(EditAnywhere, Category = "Combat", meta = (ClampMin = "0.0"))
-    float m_attackHitFallbackTime;
-
     //攻撃のヒットダメージ
     UPROPERTY(EditAnywhere, Category = "Combat", meta = (ClampMin = "0"))
     int32 m_hitDamage;
@@ -300,6 +344,10 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     TObjectPtr<UNiagaraComponent> m_pActiveAttackVFX;
 
   private:
+    //直前の手足の位置から線分を作り、フレーム間の接触も判定する。
+    FVector m_previousContact = FVector::ZeroVector;
+    //判定開始直後は骨の付け替えを攻撃軌跡に含めない。
+    bool m_contactReady = false;
     //攻撃CollisionOverlapが発生したときの処理を行います。
     UFUNCTION()
     void OnAttackCollisionOverlap(UPrimitiveComponent* _overlappedComp, AActor* _otherActor, UPrimitiveComponent* _otherComp, int32 _otherBodyIndex,
@@ -311,14 +359,12 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     //移動を停止して互換性確認済みの攻撃Montageを開始します。
     void BeginAttack();
 
-    //Notifyがないアニメーション用の予備攻撃判定です。
-    void PerformAttackHitFallback();
-
     //攻撃状態を終了し、AIの追跡処理へ戻します。
     void EndAttack();
 
     //敵種に対応した死亡Sequenceを直接再生します。
-    void PlayDeathAnimationAndDie();
+    //中断を含むモンタージュ終了時に、移動停止と攻撃判定を解除する
+    void HandleAttackMontageEnded(UAnimMontage* _montage, bool _bInterrupted);
 
     //死亡アニメーションの最終姿勢を保持します。
     void FreezeDeathPose();
@@ -387,8 +433,6 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     //攻撃HitThisSwingかを示します。
     bool m_bAttackHitThisSwing;
 
-    //攻撃のヒットを適用するためのフォールバックタイマー
-    FTimerHandle m_attackHitTimer;
     //attackEndTimerを秒単位で指定します。
     FTimerHandle m_attackEndTimer;
     //deathTimerHandleを秒単位で指定します。

@@ -1,4 +1,5 @@
 #include "GameFlowGameMode.h"
+#include "GameFlowScene.h"
 #include "GameFlowPlayerController.h"
 #include "Components/AudioComponent.h"
 #include "GameFramework/HUD.h"
@@ -26,6 +27,10 @@ void AGameFlowGameMode::StartPlay()
     //GameMode共通の開始処理を完了させてから、画面に対応するBGMを開始します。
     Super::StartPlay();
     StartScreenMusic();
+    //本編のAIを動かさず、メニュー専用の森を表示する。
+    AGameFlowScene* scene = GetWorld()->SpawnActor<AGameFlowScene>();
+    const FString level = UGameplayStatics::GetCurrentLevelName(this, true);
+    if (scene) { scene->SetScene(level == TEXT("GameClear") ? 1 : level == TEXT("GameOver") ? 2 : 0); }
 }
 
 //参加したプレイヤーを本編用Pawnへ割り当てます。
@@ -44,16 +49,12 @@ void AGameFlowGameMode::RestartPlayer(AController* _newPlayer)
 //画面Musicを開始します。
 void AGameFlowGameMode::StartScreenMusic()
 {
-    //「!GetWorld()」が成立するとき、GetWorldを呼び出します。
     if (!GetWorld()) { return; }
 
     //ワールドを返します。
     const FString mapName = GetWorld()->GetMapName();
-    //selectedMusicは、&m_gameStartMusicから取得した参照を後続の呼び出しで使います。
     TSoftObjectPtr<USoundBase>* selectedMusic = &m_gameStartMusic;
-    //screenNameは、TEXT("GameStart")から取得した参照を後続の呼び出しで使います。
     const TCHAR* screenName = TEXT("GameStart");
-    //「mapName.Contains(TEXT("GameClear"))」が成立するとき、selectedMusicを更新します。
     if (mapName.Contains(TEXT("GameClear")))
     {
         selectedMusic = &m_gameClearMusic;
@@ -64,8 +65,6 @@ void AGameFlowGameMode::StartScreenMusic()
         selectedMusic = &m_gameOverMusic;
         screenName = TEXT("GameOver");
     }
-
-    //musicは、selectedMusic->LoadSynchronous()から取得した参照を後続の呼び出しで使います。
     USoundBase* music = selectedMusic->LoadSynchronous();
     if (!music)
     {

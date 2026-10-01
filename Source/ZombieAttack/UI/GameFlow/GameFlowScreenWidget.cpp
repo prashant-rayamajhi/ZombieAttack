@@ -1,16 +1,15 @@
 #include "GameFlowScreenWidget.h"
+#include "GameFlowBackdropWidget.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
-#include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -25,7 +24,6 @@ constexpr TCHAR TitleLevelName[] = TEXT("GameStart");
 //GetTitleは、呼び出し元が必要とする対象または計算結果を返します。
 FText GetTitle(UGameFlowScreenWidget::EGameFlowScreen _screen)
 {
-    //現在の状態に合う処理へ分けます。
     switch (_screen)
     {
     case UGameFlowScreenWidget::EGameFlowScreen::Clear: return FText::AsCultureInvariant(TEXT("MISSION COMPLETE"));
@@ -37,7 +35,6 @@ FText GetTitle(UGameFlowScreenWidget::EGameFlowScreen _screen)
 //GetSubtitleは、呼び出し元が必要とする対象または計算結果を返します。
 FText GetSubtitle(UGameFlowScreenWidget::EGameFlowScreen _screen)
 {
-    //現在の状態に合う処理へ分けます。
     switch (_screen)
     {
     case UGameFlowScreenWidget::EGameFlowScreen::Clear: return FText::AsCultureInvariant(TEXT("SURVIVED UNTIL DAWN"));
@@ -51,9 +48,7 @@ FText GetSubtitle(UGameFlowScreenWidget::EGameFlowScreen _screen)
 
 //UGameFlowScreenWidgetが使用するComponentと初期パラメータを設定します。
 UGameFlowScreenWidget::UGameFlowScreenWidget(const FObjectInitializer& _objectInitializer)
-    : Super(_objectInitializer), m_gameStartBackground(FSoftObjectPath(TEXT("/Game/UI/Generated/T_GameStart_Background.T_GameStart_Background"))),
-      m_gameClearBackground(FSoftObjectPath(TEXT("/Game/UI/Generated/T_GameClear_Background.T_GameClear_Background"))),
-      m_gameOverBackground(FSoftObjectPath(TEXT("/Game/UI/Generated/T_GameOver_Background.T_GameOver_Background")))
+    : Super(_objectInitializer)
 {
 }
 
@@ -62,10 +57,21 @@ void UGameFlowScreenWidget::NativeOnInitialized()
 {
     //Widget生成時に子Widgetとゲーム側の通知を接続します。
     Super::NativeOnInitialized();
+    InitializeScreen();
+}
 
-    //LevelNameは、UGameplayStatics::GetCurrentLevelName(this, true)から構築した結果を後続の処理へ渡すために使います。
+//プレイヤー参照の初期化順に左右されず、表示時にボタンと背景を構築する
+TSharedRef<SWidget> UGameFlowScreenWidget::RebuildWidget()
+{
+    if (!m_menu) { InitializeScreen(); }
+    return Super::RebuildWidget();
+}
+
+//三画面の部品を揃え、表示する見出しと色だけをレベルに合わせる
+void UGameFlowScreenWidget::InitializeScreen()
+{
+    if (m_menu) { return; }
     const FString LevelName = UGameplayStatics::GetCurrentLevelName(this, true);
-    //「LevelName.Equals(TEXT("GameClear"), ESearchCase::IgnoreCase)」が成立するとき、m_screenを更新します。
     if (LevelName.Equals(TEXT("GameClear"), ESearchCase::IgnoreCase))
     {
         m_screen = EGameFlowScreen::Clear;
@@ -79,40 +85,22 @@ void UGameFlowScreenWidget::NativeOnInitialized()
     {
         m_screen = EGameFlowScreen::Start;
     }
-
-    //「WidgetTree && WidgetTree->RootWidget」が成立するとき、BindDesignerWidgetsを呼び出します。
-    if (WidgetTree && WidgetTree->RootWidget)
-    {
-        BindDesignerWidgets();
-    }
-    else
-    {
-        BuildScreen(m_screen);
-    }
+    //旧Designerに保存された背景画像も表示せず、同じ部品で三画面を構成する
+    BuildScreen(m_screen);
 }
 
 //Screenを作成します。
 void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
 {
-    //「!WidgetTree」が成立するとき、TEXTを呼び出します。
     if (!WidgetTree)
     {
         WidgetTree = NewObject<UWidgetTree>(this, TEXT("GameFlowWidgetTree"));
     }
-
-    //RootOverlayは、WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Ro…から取得した参照を後続の呼び出しで使います。
     UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
     WidgetTree->RootWidget = RootOverlay;
-
-    //Backgroundは、WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Backgr…から取得した参照を後続の呼び出しで使います。
-    UImage* Background = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Background"));
-    //「UTexture2D* Texture = LoadBackground(_screen)」が成立するとき、SetBrushFromTextureを呼び出します。
-    if (UTexture2D* Texture = LoadBackground(_screen))
-    {
-        Background->SetBrushFromTexture(Texture, true);
-    }
-    Background->SetBrushTintColor(FSlateColor(FLinearColor(0.72f, 0.72f, 0.72f, 1.0f)));
-    //BackgroundSlotは、RootOverlay->AddChildToOverlay(Background)から取得した参照を後続の呼び出しで使います。
+    UGameFlowBackdropWidget* Background = CreateWidget<UGameFlowBackdropWidget>(this);
+    Background->SetScene(static_cast<int32>(_screen));
+    Background->SetVisibility(ESlateVisibility::HitTestInvisible);
     UOverlaySlot* BackgroundSlot = RootOverlay->AddChildToOverlay(Background);
     BackgroundSlot->SetHorizontalAlignment(HAlign_Fill);
     BackgroundSlot->SetVerticalAlignment(VAlign_Fill);
@@ -120,20 +108,15 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
     //背景を少し暗くして、どの解像度でも文字の可読性を保ちます。
     UBorder* Shade = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("BackgroundShade"));
     Shade->SetBrushColor(m_backgroundShade);
-    //ShadeSlotは、RootOverlay->AddChildToOverlay(Shade)から取得した参照を後続の呼び出しで使います。
     UOverlaySlot* ShadeSlot = RootOverlay->AddChildToOverlay(Shade);
     ShadeSlot->SetHorizontalAlignment(HAlign_Fill);
     ShadeSlot->SetVerticalAlignment(VAlign_Fill);
-
-    //Menuは、WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), …から取得した参照を後続の呼び出しで使います。
     UVerticalBox* Menu = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Menu"));
-    //MenuSlotは、RootOverlay->AddChildToOverlay(Menu)から取得した参照を後続の呼び出しで使います。
+    m_menu = Menu;
     UOverlaySlot* MenuSlot = RootOverlay->AddChildToOverlay(Menu);
     MenuSlot->SetHorizontalAlignment(HAlign_Left);
     MenuSlot->SetVerticalAlignment(VAlign_Center);
     MenuSlot->SetPadding(m_menuPadding);
-
-    //Titleは、WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT…から取得した参照を後続の呼び出しで使います。
     UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
     Title->SetText(m_titleOverride.IsEmpty() ? GetTitle(_screen) : m_titleOverride);
     Title->SetColorAndOpacity(
@@ -142,13 +125,10 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
     Title->SetShadowOffset(FVector2D(3.f, 3.f));
     Title->SetShadowColorAndOpacity(FLinearColor::Black);
     Menu->AddChildToVerticalBox(Title);
-
-    //Subtitleは、WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT…から取得した参照を後続の呼び出しで使います。
     UTextBlock* Subtitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Subtitle"));
     Subtitle->SetText(m_subtitleOverride.IsEmpty() ? GetSubtitle(_screen) : m_subtitleOverride);
     Subtitle->SetColorAndOpacity(FSlateColor(FLinearColor(0.72f, 0.76f, 0.78f, 1.f)));
     Subtitle->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), m_subtitleFontSize));
-    //SubtitleSlotは、Menu->AddChildToVerticalBox(Subtitle)から取得した参照を後続の呼び出しで使います。
     UVerticalBoxSlot* SubtitleSlot = Menu->AddChildToVerticalBox(Subtitle);
     SubtitleSlot->SetPadding(FMargin(2.f, 4.f, 0.f, 30.f));
 
@@ -156,8 +136,6 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
         _screen == EGameFlowScreen::Start ? FText::AsCultureInvariant(TEXT("GAME START")) : FText::AsCultureInvariant(TEXT("RETRY"));
     m_pPrimaryButton = AddMenuButton(Menu, PrimaryLabel, TEXT("PrimaryButton"));
     m_pPrimaryButton->OnClicked.AddDynamic(this, &UGameFlowScreenWidget::HandlePrimaryAction);
-
-    //「_screen != EGameFlowScreen::Start」が成立するとき、AddMenuButtonを呼び出します。
     if (_screen != EGameFlowScreen::Start)
     {
         m_pTitleButton = AddMenuButton(Menu, FText::AsCultureInvariant(TEXT("BACK TO TITLE")), TEXT("TitleButton"));
@@ -166,46 +144,79 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
 
     m_pQuitButton = AddMenuButton(Menu, FText::AsCultureInvariant(TEXT("QUIT")), TEXT("QuitButton"));
     m_pQuitButton->OnClicked.AddDynamic(this, &UGameFlowScreenWidget::HandleQuitAction);
-
-    //ControllerHintは、WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT…から取得した参照を後続の呼び出しで使います。
     UTextBlock* ControllerHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ControllerHint"));
-    ControllerHint->SetText(FText::AsCultureInvariant(TEXT("A  SELECT・LEFT STICK ・ D-PAD  NAVIGATE")));
     ControllerHint->SetColorAndOpacity(FSlateColor(FLinearColor(0.48f, 0.72f, 0.70f, 1.0f)));
-    ControllerHint->SetText(FText::AsCultureInvariant(TEXT("A  SELECT  /  LEFT STICK OR D-PAD  NAVIGATE")));
     ControllerHint->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 13));
-    //HintSlotは、Menu->AddChildToVerticalBox(ControllerHint)から取得した参照を後続の呼び出しで使います。
     UVerticalBoxSlot* HintSlot = Menu->AddChildToVerticalBox(ControllerHint);
     HintSlot->SetPadding(FMargin(2.f, 12.f, 0.f, 0.f));
+    ControllerHint->SetText(FText::AsCultureInvariant(TEXT("ENTER / A  SELECT     ARROWS / D-PAD  NAVIGATE")));
+
+    //場面の目標が一目で伝わる短い案内を、操作メニューと離して置く
+    UTextBlock* objective = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SceneObjective"));
+    const TCHAR* message = _screen == EGameFlowScreen::Start ? TEXT("CLEAR THE FOREST\nFind the rifle. Defeat the infected. Reach the gate.") :
+        (_screen == EGameFlowScreen::Clear ? TEXT("THE GATE IS OPEN\nYou made it out of the forest.") :
+                                             TEXT("ONE MORE CHANCE\nKeep your distance. Reload before they close in."));
+    objective->SetText(FText::AsCultureInvariant(message));
+    objective->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 16));
+    objective->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.68f, 0.65f)));
+    UOverlaySlot* objectiveSlot = RootOverlay->AddChildToOverlay(objective);
+    objectiveSlot->SetHorizontalAlignment(HAlign_Right);
+    objectiveSlot->SetVerticalAlignment(VAlign_Bottom);
+    objectiveSlot->SetPadding(FMargin(40, 0, 50, 55));
+    m_fade = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("TransitionFade"));
+    m_fade->SetBrushColor(FLinearColor::Black);
+    m_fade->SetRenderOpacity(0.0f);
+    m_fade->SetVisibility(ESlateVisibility::HitTestInvisible);
+    UOverlaySlot* fadeSlot = RootOverlay->AddChildToOverlay(m_fade);
+    fadeSlot->SetHorizontalAlignment(HAlign_Fill);
+    fadeSlot->SetVerticalAlignment(VAlign_Fill);
+    m_buttonWeights.Init(0.0f, 3);
 }
 
-//binddesignerwidgetsを登録します。
-void UGameFlowScreenWidget::BindDesignerWidgets()
+//画面の入りと選択の動きを抑えめに揃え、文字を追いかけなくても操作できるようにする
+void UGameFlowScreenWidget::NativeTick(const FGeometry& _geometry, float _deltaTime)
 {
-    m_pPrimaryButton = Cast<UButton>(WidgetTree->FindWidget(TEXT("PrimaryButton")));
-    m_pTitleButton = Cast<UButton>(WidgetTree->FindWidget(TEXT("TitleButton")));
-    m_pQuitButton = Cast<UButton>(WidgetTree->FindWidget(TEXT("QuitButton")));
-
-    //「m_pPrimaryButton」が成立するとき、AddUniqueDynamicを呼び出します。
-    if (m_pPrimaryButton)
+    Super::NativeTick(_geometry, _deltaTime);
+    m_screenTime += _deltaTime;
+    if (m_menu)
     {
-        m_pPrimaryButton->OnClicked.AddUniqueDynamic(this, &UGameFlowScreenWidget::HandlePrimaryAction);
+        const float progress = FMath::Clamp(m_screenTime / 0.65f, 0.0f, 1.0f);
+        const float eased = 1.0f - FMath::Pow(1.0f - progress, 3.0f);
+        m_menu->SetRenderOpacity(eased);
+        m_menu->SetRenderTranslation(FVector2D(-28.0f * (1.0f - eased), 0.0f));
     }
-    //「m_pTitleButton」が成立するとき、AddUniqueDynamicを呼び出します。
-    if (m_pTitleButton)
+    UButton* buttons[] = {m_pPrimaryButton, m_pTitleButton, m_pQuitButton};
+    int32 focused = INDEX_NONE;
+    for (int32 index = 0; index < 3; ++index)
     {
-        m_pTitleButton->OnClicked.AddUniqueDynamic(this, &UGameFlowScreenWidget::HandleTitleAction);
+        UButton* button = buttons[index];
+        if (!button || !m_buttonWeights.IsValidIndex(index)) { continue; }
+        const bool selected = button->IsHovered() || button->HasKeyboardFocus() ||
+                              (GetOwningPlayer() && button->HasUserFocus(GetOwningPlayer()));
+        m_buttonWeights[index] = FMath::FInterpTo(m_buttonWeights[index], selected ? 1.0f : 0.0f, _deltaTime, 12.0f);
+        const float weight = m_buttonWeights[index];
+        button->SetRenderTranslation(FVector2D(8.0f * weight, 0.0f));
+        button->SetBackgroundColor(FMath::Lerp(FLinearColor(0.025f, 0.035f, 0.04f), FLinearColor(0.24f, 0.09f, 0.07f), weight));
+        if (selected) { focused = index; }
     }
-    //「m_pQuitButton」が成立するとき、AddUniqueDynamicを呼び出します。
-    if (m_pQuitButton)
+    if (focused != INDEX_NONE && focused != m_focusedIndex && m_focusedIndex != INDEX_NONE) { PlaySelectSound(); }
+    m_focusedIndex = focused;
+    if (!m_pendingLevel.IsNone())
     {
-        m_pQuitButton->OnClicked.AddUniqueDynamic(this, &UGameFlowScreenWidget::HandleQuitAction);
+        m_exitTime += _deltaTime;
+        if (m_fade) { m_fade->SetRenderOpacity(FMath::Clamp(m_exitTime / 0.25f, 0.0f, 1.0f)); }
+        if (m_exitTime >= 0.25f)
+        {
+            const FName level = m_pendingLevel;
+            m_pendingLevel = NAME_None;
+            UGameplayStatics::OpenLevel(this, level);
+        }
     }
 }
 
 //キーボードとゲームパッド操作の初期フォーカスを主要ボタンへ移します。
 void UGameFlowScreenWidget::FocusDefaultButton(APlayerController* _playerController)
 {
-    //「!m_pPrimaryButton || !_playerController」が成立するとき、SetUserFocusを呼び出します。
     if (!m_pPrimaryButton || !_playerController) { return; }
 
     m_pPrimaryButton->SetUserFocus(_playerController);
@@ -222,13 +233,9 @@ UButton* UGameFlowScreenWidget::AddMenuButton(UVerticalBox* _parent, const FText
 {
     //配置先のVerticalBoxがない場合はWidgetを構築できないため、参照なしを返して終了します。
     if (!_parent) { return nullptr; }
-
-    //Buttonは、WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), _widgetNam…から取得した参照を後続の呼び出しで使います。
     UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), _widgetName);
     Button->SetBackgroundColor(FLinearColor(0.025f, 0.035f, 0.04f, 0.92f));
     Button->SetColorAndOpacity(FLinearColor::White);
-
-    //Labelは、WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass())から取得した参照を後続の呼び出しで使います。
     UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
     Label->SetText(_label);
     Label->SetJustification(ETextJustify::Left);
@@ -236,41 +243,21 @@ UButton* UGameFlowScreenWidget::AddMenuButton(UVerticalBox* _parent, const FText
     Label->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 21, TEXT("Bold")));
     Label->SetMargin(FMargin(20.f, 12.f));
     Button->SetContent(Label);
-
-    //ButtonSlotは、_parent->AddChildToVerticalBox(Button)から取得した参照を後続の呼び出しで使います。
     UVerticalBoxSlot* ButtonSlot = _parent->AddChildToVerticalBox(Button);
     ButtonSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
     ButtonSlot->SetHorizontalAlignment(HAlign_Fill);
-    //Buttonは、UI部品を構築または更新する呼び出しで参照するために使います。
     return Button;
-}
-
-//BackgroundをAssetから読み込みます。
-UTexture2D* UGameFlowScreenWidget::LoadBackground(EGameFlowScreen _screen) const
-{
-    //「m_backgroundOverride」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
-    if (m_backgroundOverride) { return m_backgroundOverride; }
-
-    //現在の状態に合う処理へ分けます。
-    switch (_screen)
-    {
-    case EGameFlowScreen::Clear: return m_gameClearBackground.LoadSynchronous();
-    case EGameFlowScreen::GameOver: return m_gameOverBackground.LoadSynchronous();
-    default: return m_gameStartBackground.LoadSynchronous();
-    }
 }
 
 //LevelCheckedへ安全に遷移します。
 void UGameFlowScreenWidget::OpenLevelChecked(FName _levelName)
 {
-    if (_levelName.IsNone())
-    {
-        return;
-    }
+    if (_levelName.IsNone()) { return; }
 
-    SetIsEnabled(false);
-    //Levelへ安全に遷移します。
-    UGameplayStatics::OpenLevel(this, _levelName);
+    if (!m_pendingLevel.IsNone()) { return; }
+    m_pendingLevel = _levelName;
+    m_exitTime = 0.0f;
+    if (m_menu) { m_menu->SetIsEnabled(false); }
 }
 
 //PrimaryActionの通知を受けてゲーム状態へ反映します。
@@ -291,7 +278,6 @@ void UGameFlowScreenWidget::HandleTitleAction()
 void UGameFlowScreenWidget::HandleQuitAction()
 {
     PlaySelectSound();
-    //「APlayerController* PlayerController = GetOwningPlayer()」が成立するとき、QuitGameを呼び出します。
     if (APlayerController* PlayerController = GetOwningPlayer())
     {
         UKismetSystemLibrary::QuitGame(this, PlayerController, EQuitPreference::Quit, false);
@@ -302,7 +288,6 @@ void UGameFlowScreenWidget::HandleQuitAction()
 void UGameFlowScreenWidget::PlaySelectSound() const
 {
     constexpr TCHAR SelectSoundPath[] = TEXT("/Game/Audio/CC0/S_UI_Select.S_UI_Select");
-    //「USoundBase* SelectSound = LoadObject<USoundBase>(nullptr, SelectSoundPath)」が成立するとき、PlaySound2Dを呼び出します。
     if (USoundBase* SelectSound = LoadObject<USoundBase>(nullptr, SelectSoundPath))
     {
         UGameplayStatics::PlaySound2D(this, SelectSound);

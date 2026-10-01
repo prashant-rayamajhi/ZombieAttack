@@ -14,8 +14,7 @@ void UAnimNotifyState_EnemyAttackCollision::NotifyBegin(USkeletalMeshComponent* 
 
     //メッシュコンポーネントの所有者をAEnemyChara型にキャスト
     AEnemyChara* enemy = Cast<AEnemyChara>(_meshComp->GetOwner());
-    //「!enemy」が成立するとき、ResetAttackHitForNewSwingを呼び出します。
-    if (!enemy) { return; }
+    if (!enemy || !enemy->PrepareAttackContact(m_contactBone)) { return; }
 
     //敵の攻撃ヒット処理をリセットし、新しいスイングに備える
     enemy->ResetAttackHitForNewSwing();
@@ -35,7 +34,6 @@ void UAnimNotifyState_EnemyAttackCollision::NotifyEnd(USkeletalMeshComponent* _m
 
     //メッシュコンポーネントの所有者をAEnemyChara型にキャスト
     AEnemyChara* enemy = Cast<AEnemyChara>(_meshComp->GetOwner());
-    //「!enemy」が成立するとき、SetAttackCollisionEnabledを呼び出します。
     if (!enemy) { return; }
 
     //敵の攻撃コリジョンを無効化する

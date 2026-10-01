@@ -22,9 +22,9 @@ class ZOMBIEATTACK_API AWeaponBase : public AActor
     //UseWeaponは、名前が示す装備または機能を使用する処理を開始します。
     virtual void UseWeapon();
     //AddAmmoは、名前が示す対象を既存の状態または一覧へ追加します。
-    virtual void AddAmmo(float Amount);
+    virtual void AddAmmo(float _amount);
     //所有者キャラクターを設定します。
-    void SetOwnerCharacter(ABaseCharacter* NewOwner);
+    void SetOwnerCharacter(ABaseCharacter* _pNewOwner);
 
     //武器メッシュを返します。
     USkeletalMeshComponent* GetWeaponMesh() const { return m_pWeapon; }
@@ -38,7 +38,7 @@ class ZOMBIEATTACK_API AWeaponBase : public AActor
 
     //ダメージを保持します。
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon", meta = (ClampMin = "0.0"))
-    float m_Damage;
+    float m_damage;
 
     //所有者キャラクターを保持します。
     UPROPERTY(Transient)

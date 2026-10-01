@@ -4,6 +4,7 @@
 #include "../Character/BaseCharacter.h"
 #include "../Components/RifleAnimation/RifleAnimationTypes.h"
 #include "../PickUp/PickUpBase.h"
+#include "../Components/Combat/AttackInputBuffer.h"
 #include "PlayerChara.generated.h"
 
 //前方宣言
@@ -68,6 +69,21 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     //エンジンが使う定型コード
     GENERATED_BODY()
 
+public:
+    //画面遷移でプレイヤーが消える場合も、撃破演出の時間倍率を戻す。
+    virtual void EndPlay(const EEndPlayReason::Type _reason) override;
+private:
+    //行動終了直前に押された射撃を一回だけ受け付ける。
+    FAttackInputBuffer m_attackBuffer;
+    //行動制限と装備を照合し、期限内の射撃予約だけを実行する。
+    void UpdateBufferedAttack();
+    //連続撃破で画面停止を延長しないための実時間。
+    double m_lastKillStop = -100.0;
+    //演出前の時間倍率を保ち、他のスロー演出を強制解除しない。
+    float m_beforeKillStop = 1.0f;
+    //自分が開始したヒットストップだけを終了させる。
+    bool m_killStopActive = false;
+
   public:
     //プレイヤーキャラクターを処理します。
     APlayerChara();
@@ -78,13 +94,13 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
 
   public:
     //毎フレームの更新を行います。
-    virtual void Tick(float DeltaTime) override;
+    virtual void Tick(float _deltaTime) override;
     //入力コンポーネントの処理を担当するコンポーネント
-    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+    virtual void SetupPlayerInputComponent(class UInputComponent* _pInputComp) override;
     //装備中の武器で攻撃します。
     virtual void Attack() override;
     //着地後の状態を整えます。
-    virtual void Landed(const FHitResult& Hit) override;
+    virtual void Landed(const FHitResult& _hit) override;
 
     //アニメーション再生中の移動を止めます。
     UFUNCTION(BlueprintCallable, Category = "Player|Movement Lock")
@@ -99,7 +115,7 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     bool IsMovementLockedByAnimation() const { return m_bMovementLockedByAnimation; }
 
     //最大体力を返します。
-    float GetMaxHP() { return m_MaxHp; }
+    float GetMaxHP() { return m_maxHp; }
     //現在装備している武器を返します。
     AWeaponBase* GetCurrentWeapon() const { return m_pCurrentWeapon; }
 
@@ -202,18 +218,17 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
 
     //体力を返します。
     UFUNCTION(BlueprintCallable, Category = "HP")
-    float GetHP() { return m_Hp; }
+    float GetHP() { return m_hp; }
 
     UFUNCTION(BlueprintCallable, Category = "Weapon",
               meta = (DeprecatedFunction, DeprecationMessage = "Use the built-in Pistol/AR/Knife slot system instead."))
-    //AttachWeaponは、AttachWeaponの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
-    void AttachWeapon(TSubclassOf<AActor> WeaponClass);
+    void AttachWeapon(TSubclassOf<AActor> _weaponClass);
 
   public:
-    //EquippedWeaponをゲーム処理から参照できるように管理します。
+    //m_pEquippedWeaponをゲーム処理から参照できるように管理します。
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
-    //EquippedWeaponをゲーム処理から参照できるように管理します。
-    TObjectPtr<AActor> EquippedWeapon;
+    //m_pEquippedWeaponをゲーム処理から参照できるように管理します。
+    TObjectPtr<AActor> m_pEquippedWeapon;
 
     //userWidgetNormalをゲーム処理から参照できるように管理します。
     UPROPERTY(EditAnywhere, Category = "UI")
@@ -316,30 +331,6 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     //idleTimeoutSecondsを秒単位で指定します。
     float m_idleTimeoutSeconds = 8.f;
 
-    //後退を始めてから自動追従を開始するまでの待ち時間です。
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-    //ackwardカメラFollowDelayかを示します。
-    float m_backwardCameraFollowDelay;
-
-    //自動追従の最大Yaw回転速度です。急な180度回転を防ぎます。
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "30.0", ClampMax = "240.0"))
-    //ackwardカメラFollowYaw速度かを示します。
-    float m_backwardCameraFollowYawSpeed;
-
-    //自動追従が最大速度になるまでの加速時間です。
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "0.05", ClampMax = "1.5"))
-    //ackwardカメラFollowAccelerationTimeかを示します。
-    float m_backwardCameraFollowAccelerationTime;
-
-    //この値を超える横入力がある間は、自動追従を行いません。
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    //ackwardカメラFollowStrafeToleranceかを示します。
-    float m_backwardCameraFollowStrafeTolerance;
-
-    //手動でカメラを動かした後、自動追従を再開しない時間です。
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "0.0", ClampMax = "3.0"))
-    //cameraManualOverride時間を秒単位で指定します。
-    float m_cameraManualOverrideDuration;
 
     //reload速度Scaleの調整値です。
     UPROPERTY(EditAnywhere, Category = "Move")
@@ -376,7 +367,6 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     void UpdateCamera(float _deltaTime);
     //UpdateMoveは、引数の内容をゲーム中の状態または表示へ反映します。
     void UpdateMove(float _deltaTime);
-    //AlignRifleVisualFacingは、AlignRifleVisualFacingの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void AlignRifleVisualFacing();
     //ジャンプを更新します。
     void UpdateJump(float _deltaTime);
@@ -386,28 +376,17 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     void UpdateIdleState(float _deltaTime);
     //ジャンプを完了します。
     void EndJump();
-
-    //SwitchToPistolは、SwitchToPistolの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void SwitchToPistol();
-    //SwitchToARは、SwitchToARの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void SwitchToAR();
-    //SwitchToKnifeは、SwitchToKnifeの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void SwitchToKnife();
-    //SwitchWeaponToSlotは、SwitchWeaponToSlotの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     bool SwitchWeaponToSlot(EWeaponSlot _slot);
-    //CycleNextWeaponは、CycleNextWeaponの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void CycleNextWeapon();
-    //CyclePreviousWeaponは、CyclePreviousWeaponの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void CyclePreviousWeapon();
     //OnWeaponWheelは、名前が示すイベント通知を受けて関連するゲーム状態を更新します。
-    void OnWeaponWheel(float Value);
-    //RebuildWeaponDisplayOrderは、RebuildWeaponDisplayOrderの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
+    void OnWeaponWheel(float _wheelValue);
     void RebuildWeaponDisplayOrder();
-    //MoveWeaponSlotToBottomは、MoveWeaponSlotToBottomの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void MoveWeaponSlotToBottom(EWeaponSlot _slot);
-    //RefreshWeaponCarouselは、RefreshWeaponCarouselの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void RefreshWeaponCarousel();
-    //IsWeaponAvailableは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool IsWeaponAvailable(EWeaponSlot _slot) const;
     //GetWeaponForSlotは、呼び出し元が必要とする対象または計算結果を返します。
     AWeaponBase* GetWeaponForSlot(EWeaponSlot _slot) const;
@@ -423,24 +402,15 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     void PickupItem(EItemType _type, float _value);
     //待機タイマーを解除します。
     void ResetIdleTimer();
-    //CanAcceptMoveInputは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool CanAcceptMoveInput() const;
     //BeginDeathSequenceは、名前が示す動作を開始するための初期状態を整えます。
     void BeginDeathSequence();
-    //FreezeDeathPoseは、FreezeDeathPoseの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void FreezeDeathPose();
-    //RestoreKillHitStopは、RestoreKillHitStopの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void RestoreKillHitStop();
-
-    //Cam_RotatePitchは、Cam_RotatePitchの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void Cam_RotatePitch(float _value);
-    //Cam_RotateYawは、Cam_RotateYawの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void Cam_RotateYaw(float _value);
-    //Chara_MoveForwardは、Chara_MoveForwardの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void Chara_MoveForward(float _value);
-    //Chara_MoveRightは、Chara_MoveRightの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void Chara_MoveRight(float _value);
-    //JumpStartは、JumpStartの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void JumpStart();
     //エイムを処理します。
     void StartAim();
@@ -469,17 +439,13 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
 
     //Rifle Aiming Idleが実際に再生中か確認します。
     bool IsRifleReadyToFire() const;
-    //ShouldUsePersistentRifleAimは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool ShouldUsePersistentRifleAim() const;
-    //RefreshRifleCombatAimは、RefreshRifleCombatAimの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void RefreshRifleCombatAim();
     //射撃終了後にライフルの構えを解除します。
     void EndRifleCombatAim();
     //StopRifleAimPoseは、名前が示す動作を終了し、継続中の状態を解除します。
     void StopRifleAimPose(float _blendOutTime = 0.12f);
-    //SwapCrosshairWidgetは、SwapCrosshairWidgetの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void SwapCrosshairWidget();
-    //ControlHUDVisiblityは、ControlHUDVisiblityの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     void ControlHUDVisiblity();
     //UseHealItemは、名前が示す装備または機能を使用する処理を開始します。
     void UseHealItem();
@@ -510,13 +476,6 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     //cameraPitchLimitをゲーム処理から参照できるように管理します。
     FVector2D m_cameraPitchLimit;
 
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-    //後退カメラを開始する入力値
-    float m_backwardCameraFollowThreshold;
-
-    UPROPERTY(EditAnywhere, Category = "Camera|Movement", meta = (ClampMin = "0.1", ClampMax = "20.0"))
-    //後退時のカメラ回転補間速度
-    float m_backwardCameraFollowSpeed;
 
     //move速度の調整値です。
     UPROPERTY(EditAnywhere, Category = "Move")
@@ -533,10 +492,10 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     //jumpPowerをゲーム処理から参照できるように管理します。
     float m_jumpPower;
 
-    //WeaponSocketNameをゲーム処理から参照できるように管理します。
+    //m_weaponSocketNameをゲーム処理から参照できるように管理します。
     UPROPERTY(EditDefaultsOnly, Category = "Weapon")
-    //WeaponSocketNameをゲーム処理から参照できるように管理します。
-    FName WeaponSocketName;
+    //m_weaponSocketNameをゲーム処理から参照できるように管理します。
+    FName m_weaponSocketName;
 
     //defaultFOVをゲーム処理から参照できるように管理します。
     UPROPERTY(EditAnywhere, Category = "Camera|Aim")
@@ -629,14 +588,6 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     FVector2D m_cameraRotation;
     //defaultMeshRelative回転をゲーム処理から参照できるように管理します。
     FRotator m_defaultMeshRelativeRotation;
-    //ackwardMove方向かを示します。
-    FVector m_backwardMoveDirection;
-    //ackwardカメラTargetWorldYawかを示します。
-    float m_backwardCameraTargetWorldYaw = 0.0f;
-    //ackward入力HoldTimeかを示します。
-    float m_backwardInputHoldTime = 0.0f;
-    //cameraManualOverride残りをゲーム処理から参照できるように管理します。
-    float m_cameraManualOverrideRemaining = 0.0f;
     //idleTimerAccumを秒単位で指定します。
     float m_idleTimerAccum = 0.f;
     //lastWeaponWheel入力をゲーム処理から参照できるように管理します。
@@ -672,8 +623,6 @@ class ZOMBIEATTACK_API APlayerChara : public ABaseCharacter
     bool m_bCrosshairSuppressed;
     //IsDeadかを示します。
     bool m_bIsDead;
-    //BackwardカメラFollowActiveかを示します。
-    bool b_mBackwardCameraFollowActive;
     //GameOverRequestedかを示します。
     bool m_bGameOverRequested = false;
 };

@@ -15,12 +15,10 @@ void UAnimNotify_MeleeComboBranch::Notify(USkeletalMeshComponent* _meshComp, UAn
 
     //メッシュコンポーネントの所有者をAPlayerChara型にキャスト
     APlayerChara* player = Cast<APlayerChara>(_meshComp->GetOwner());
-    //「!player」が成立するとき、GetCurrentWeaponを呼び出します。
     if (!player) { return; }
 
     //プレイヤーの現在の武器をAMeleeWeapon型にキャスト
     AMeleeWeapon* meleeWeapon = Cast<AMeleeWeapon>(player->GetCurrentWeapon());
-    //「!meleeWeapon」が成立するとき、TryContinueComboFromNotifyを呼び出します。
     if (!meleeWeapon) { return; }
 
     //メレー武器のコンボ継続処理を実行

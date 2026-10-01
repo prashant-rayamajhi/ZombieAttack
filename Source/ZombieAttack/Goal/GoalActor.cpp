@@ -17,10 +17,14 @@
 //コンストラクタ
 AGoalActor::AGoalActor()
     : m_pMagicCircleSystem(nullptr), m_magicCircleColorParameter(TEXT("User.Color")), m_inactiveGoalColor(FLinearColor(1.0f, 0.02f, 0.02f, 1.0f)),
-      m_activeGoalColor(FLinearColor(0.02f, 1.0f, 0.15f, 1.0f)), m_goalLightIntensity(7000.0f), m_clearDelay(1.5f),
+      m_activeGoalColor(FLinearColor(0.02f, 1.0f, 0.15f, 1.0f)), m_goalLightIntensity(1200.0f), m_clearDelay(1.5f),
       m_gameClearLevelName(TEXT("GameClear")), m_pDynamicGoalMaterial(nullptr), m_bActivated(false), m_bTransitionRequested(false), m_visualTime(0.0f)
 {
     PrimaryActorTick.bCanEverTick = true;
+
+    //実行ファイルにも素材を含め、エディタだけで質感が表示される状態を防ぐ。
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> beaconMaterial(TEXT("/Game/Materials/Goal/M_EvacBeacon.M_EvacBeacon"));
+    m_beaconMaterial = beaconMaterial.Object;
 
     //SphereComponentをルートコンポーネントとして作成
     m_pSphereComp = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComp"));
@@ -50,10 +54,7 @@ AGoalActor::AGoalActor()
     m_pGoalLightComp->SetRelativeLocation(FVector(0.0f, 0.0f, 180.0f));
     m_pGoalLightComp->SetIntensity(m_goalLightIntensity);
     m_pGoalLightComp->SetAttenuationRadius(900.0f);
-
-    //CylinderMeshは、CylinderMeshの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-    //ConeMeshは、ConeMeshの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
 
     m_pBeaconBaseComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BeaconBase"));
@@ -61,7 +62,6 @@ AGoalActor::AGoalActor()
     m_pBeaconBaseComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     m_pBeaconBaseComp->SetRelativeLocation(FVector(0.0f, 0.0f, 8.0f));
     m_pBeaconBaseComp->SetRelativeScale3D(FVector(2.8f, 2.8f, 0.08f));
-    //「CylinderMesh.Succeeded()」が成立するとき、SetStaticMeshを呼び出します。
     if (CylinderMesh.Succeeded())
     {
         m_pBeaconBaseComp->SetStaticMesh(CylinderMesh.Object);
@@ -72,7 +72,6 @@ AGoalActor::AGoalActor()
     m_pBeaconColumnComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     m_pBeaconColumnComp->SetRelativeLocation(FVector(0.0f, 0.0f, 105.0f));
     m_pBeaconColumnComp->SetRelativeScale3D(FVector(0.42f, 0.42f, 2.1f));
-    //「CylinderMesh.Succeeded()」が成立するとき、SetStaticMeshを呼び出します。
     if (CylinderMesh.Succeeded())
     {
         m_pBeaconColumnComp->SetStaticMesh(CylinderMesh.Object);
@@ -84,7 +83,6 @@ AGoalActor::AGoalActor()
     m_pBeaconArrowComp->SetRelativeLocation(FVector(0.0f, 0.0f, 230.0f));
     m_pBeaconArrowComp->SetRelativeRotation(FRotator(180.0f, 0.0f, 0.0f));
     m_pBeaconArrowComp->SetRelativeScale3D(FVector(0.65f, 0.65f, 1.2f));
-    //「ConeMesh.Succeeded()」が成立するとき、SetStaticMeshを呼び出します。
     if (ConeMesh.Succeeded())
     {
         m_pBeaconArrowComp->SetStaticMesh(ConeMesh.Object);
@@ -101,46 +99,35 @@ AGoalActor::AGoalActor()
 }
 
 //毎フレームの更新を行います。
-void AGoalActor::Tick(float DeltaTime)
+void AGoalActor::Tick(float _deltaTime)
 {
     //フレームごとの経過時間を使って、移動や表示の変化を更新します。
-    Super::Tick(DeltaTime);
-    m_visualTime += DeltaTime;
-
-    //「m_pBeaconBaseComp」が成立するとき、AddLocalRotationを呼び出します。
+    Super::Tick(_deltaTime);
+    m_visualTime += _deltaTime;
     if (m_pBeaconBaseComp)
     {
-        m_pBeaconBaseComp->AddLocalRotation(FRotator(0.0f, DeltaTime * (m_bActivated ? 85.0f : 22.0f), 0.0f));
+        m_pBeaconBaseComp->AddLocalRotation(FRotator(0.0f, _deltaTime * (m_bActivated ? 85.0f : 22.0f), 0.0f));
     }
-    //「m_pBeaconArrowComp」が成立するとき、Sinを呼び出します。
     if (m_pBeaconArrowComp)
     {
-        //Hoverは、FMath::Sin(m_visualTime * 2.5f) * 18.0fから算出した数値を後続の判定または計算に使います。
         const float Hover = FMath::Sin(m_visualTime * 2.5f) * 18.0f;
         m_pBeaconArrowComp->SetRelativeLocation(FVector(0.0f, 0.0f, 230.0f + Hover));
-        m_pBeaconArrowComp->AddLocalRotation(FRotator(0.0f, DeltaTime * 55.0f, 0.0f));
+        m_pBeaconArrowComp->AddLocalRotation(FRotator(0.0f, _deltaTime * 55.0f, 0.0f));
     }
-    //「m_pBeaconColumnComp」が成立するとき、Sinを呼び出します。
     if (m_pBeaconColumnComp)
     {
-        //BreathingScaleは、1.0f + FMath::Sin(m_visualTime * 3.0f) * 0.035fから算出した数値を後続の判定または計算に使います。
         const float BreathingScale = 1.0f + FMath::Sin(m_visualTime * 3.0f) * 0.035f;
         m_pBeaconColumnComp->SetRelativeScale3D(FVector(0.42f * BreathingScale, 0.42f * BreathingScale, 2.1f));
     }
-    //「m_pGoalLightComp」が成立するとき、Sinを呼び出します。
     if (m_pGoalLightComp)
     {
-        //Pulseは、0.78f + 0.22f * FMath::Sin(m_visualTime * (m_bActivated ? 5.0f : 2.0f))から算出した数値を後続の判定または計算に使います。
         const float Pulse = 0.78f + 0.22f * FMath::Sin(m_visualTime * (m_bActivated ? 5.0f : 2.0f));
         m_pGoalLightComp->SetIntensity(m_goalLightIntensity * Pulse);
     }
-    //「m_pStatusTextComp」が成立するとき、続けて「const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0)」を判定します。
     if (m_pStatusTextComp)
     {
-        //「const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0)」が成立するとき、GetActorLocationを呼び出します。
         if (const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0))
         {
-            //Facingは、(PlayerPawn->GetActorLocation() - m_pStatusTextComp->GetComponentLocati…から求めた空間情報を位置または向きの計算に使います。
             const FRotator Facing = (PlayerPawn->GetActorLocation() - m_pStatusTextComp->GetComponentLocation()).Rotation();
             m_pStatusTextComp->SetWorldRotation(FRotator(0.0f, Facing.Yaw, 0.0f));
         }
@@ -176,8 +163,6 @@ bool AGoalActor::ResolveComponents()
     {
         m_pSphereComp = Cast<USphereComponent>(GetRootComponent());
     }
-
-    //「!IsValid(m_pSphereComp)」が成立するとき、m_pSphereCompを更新します。
     if (!IsValid(m_pSphereComp))
     {
         m_pSphereComp = FindComponentByClass<USphereComponent>();
@@ -194,14 +179,10 @@ bool AGoalActor::ResolveComponents()
     {
         m_pMeshComp = FindComponentByClass<UStaticMeshComponent>();
     }
-
-    //「!IsValid(m_pMagicCircleComp)」が成立するとき、m_pMagicCircleCompを更新します。
     if (!IsValid(m_pMagicCircleComp))
     {
         m_pMagicCircleComp = FindComponentByClass<UNiagaraComponent>();
     }
-
-    //「!IsValid(m_pGoalLightComp)」が成立するとき、m_pGoalLightCompを更新します。
     if (!IsValid(m_pGoalLightComp))
     {
         m_pGoalLightComp = FindComponentByClass<UPointLightComponent>();
@@ -240,6 +221,21 @@ void AGoalActor::ApplyGoalVisualState(bool _bActive)
     //アクティブ状態に応じてゴールの色を決定
     const FLinearColor goalColor = _bActive ? m_activeGoalColor : m_inactiveGoalColor;
 
+    //白い基本形状のままにならないよう、三つの部品へ金属素材と控えめな誘導色を設定する。
+    if (m_beaconMaterial)
+    {
+        for (UStaticMeshComponent* part : {m_pBeaconBaseComp.Get(), m_pBeaconColumnComp.Get(), m_pBeaconArrowComp.Get()})
+        {
+            if (!part) { continue; }
+            UMaterialInstanceDynamic* material = Cast<UMaterialInstanceDynamic>(part->GetMaterial(0));
+            if (!material || material->Parent != m_beaconMaterial)
+            {
+                material = part->CreateDynamicMaterialInstance(0, m_beaconMaterial);
+            }
+            if (material) { material->SetVectorParameterValue(TEXT("BeaconColor"), goalColor * 0.025f); }
+        }
+    }
+
     //アクティブ状態に応じてゴールの表示を切り替え
     SetActorHiddenInGame(false);
 
@@ -247,13 +243,10 @@ void AGoalActor::ApplyGoalVisualState(bool _bActive)
     if (m_pMagicCircleComp)
     {
         m_pMagicCircleComp->SetHiddenInGame(false);
-        //「m_pMagicCircleSystem」が成立するとき、SetAssetを呼び出します。
         if (m_pMagicCircleSystem)
         {
             m_pMagicCircleComp->SetAsset(m_pMagicCircleSystem);
         }
-
-        //「!m_pMagicCircleComp->IsActive()」が成立するとき、Activateを呼び出します。
         if (!m_pMagicCircleComp->IsActive())
         {
             m_pMagicCircleComp->Activate(true);
@@ -283,8 +276,6 @@ void AGoalActor::ApplyGoalVisualState(bool _bActive)
         m_pMeshComp->SetVisibility(false, true);
         m_pMeshComp->SetHiddenInGame(true, true);
     }
-
-    //「m_pStatusTextComp」が成立するとき、SetTextを呼び出します。
     if (m_pStatusTextComp)
     {
         m_pStatusTextComp->SetText(_bActive ? FText::FromString(TEXT("EVACUATION READY\nENTER THE GREEN BEACON"))
@@ -343,7 +334,6 @@ void AGoalActor::ActivateGoal()
     //ゴール到達時のUIウィジェットを表示
     if (m_goalWidgetClass)
     {
-        //「UUserWidget* goalWidget = CreateWidget<UUserWidget>(GetWorld(), m_goalWidgetClass)」が成立するとき、AddToViewportを呼び出します。
         if (UUserWidget* goalWidget = CreateWidget<UUserWidget>(GetWorld(), m_goalWidgetClass))
         {
             goalWidget->AddToViewport();
@@ -372,12 +362,8 @@ void AGoalActor::OnOverlapBegin(UPrimitiveComponent* _overlappedComponent, AActo
                                     FTimerDelegate::CreateLambda(
                                         [weakThis]()
                                         {
-                                            //「!weakThis.IsValid()」が成立するとき、Getを呼び出します。
                                             if (!weakThis.IsValid()) { return; }
-
-                                            //goalActorは、weakThis.Get()から取得した参照を後続の呼び出しで使います。
                                             AGoalActor* goalActor = weakThis.Get();
-                                            //「!goalActor->m_gameClearLevelName.IsNone()」が成立するとき、OpenLevelを呼び出します。
                                             if (!goalActor->m_gameClearLevelName.IsNone())
                                             {
                                                 //Levelへ安全に遷移します。

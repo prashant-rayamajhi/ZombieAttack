@@ -4,7 +4,6 @@
 
 //コンストラクタ
 AEnemySpawnPoint::AEnemySpawnPoint()
-    //m_rootは、m_rootの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     : m_root(nullptr), m_arrow(nullptr), m_randomRadius(80.f), m_bUsePointRotation(true), m_requiredGroundActorTag(NAME_None)
 {
     //Tickを無効化

@@ -16,9 +16,7 @@ class ZOMBIEATTACK_API UGameFlowUISubsystem : public UGameInstanceSubsystem
     GENERATED_BODY()
 
   public:
-    //Initializeは、Initializeの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     virtual void Initialize(FSubsystemCollectionBase& _collection) override;
-    //Deinitializeは、Deinitializeの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     virtual void Deinitialize() override;
 
   private:
@@ -26,7 +24,6 @@ class ZOMBIEATTACK_API UGameFlowUISubsystem : public UGameInstanceSubsystem
     void HandlePostLoadMap(UWorld* _loadedWorld);
     //ShowScreenは、名前が示すUIを構築して画面へ表示します。
     void ShowScreen(UWorld* _world);
-    //IsGameFlowMapは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool IsGameFlowMap(const FString& _levelName) const;
 
   private:

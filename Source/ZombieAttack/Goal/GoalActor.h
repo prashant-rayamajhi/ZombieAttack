@@ -38,7 +38,7 @@ class ZOMBIEATTACK_API AGoalActor : public AActor
     //コンストラクタ
     virtual void OnConstruction(const FTransform& _transform) override;
     //毎フレームの更新を行います。
-    virtual void Tick(float DeltaTime) override;
+    virtual void Tick(float _deltaTime) override;
 
     //ゴールを有効化する
     UFUNCTION(BlueprintCallable, Category = "Goal")
@@ -76,6 +76,10 @@ class ZOMBIEATTACK_API AGoalActor : public AActor
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
     //MeshCompの操作に使用する参照です。
     TObjectPtr<UStaticMeshComponent> m_pMeshComp;
+
+    //出口の台座・支柱・矢印で共有する、金属テクスチャ付きの素材。
+    UPROPERTY(EditDefaultsOnly, Category = "Goal|Presentation")
+    TObjectPtr<UMaterialInterface> m_beaconMaterial;
 
     //NiagaraComponentの参照
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))

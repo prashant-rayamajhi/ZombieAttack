@@ -23,12 +23,11 @@
 //プレイヤーキャラクターを処理します。
 APlayerChara::APlayerChara()
     : m_pPistolReloadAnimation(nullptr), m_pRifleReloadAnimation(nullptr), m_pLandingMontage(nullptr), m_idleTimeoutSeconds(8.f),
-      m_backwardCameraFollowDelay(0.3f), m_backwardCameraFollowYawSpeed(115.0f), m_backwardCameraFollowAccelerationTime(0.35f),
-      m_backwardCameraFollowStrafeTolerance(0.2f), m_cameraManualOverrideDuration(0.8f), m_reloadSpeedScale(0.4f), m_switchWeaponSpeedScale(1.0f),
+      m_reloadSpeedScale(0.4f), m_switchWeaponSpeedScale(1.0f),
       m_jumpStartMoveLockTime(0.12f), m_landingFallbackUnlockTime(0.45f), m_pSpringArm(nullptr), m_pCamera(nullptr), m_pPlayerFillLight(nullptr),
       m_pAudioComponent(nullptr), m_pRifleAnimationComponent(nullptr), m_cameraPitchLimit(FVector2D(-80.f, 80.f)),
-      m_backwardCameraFollowThreshold(0.45f), m_backwardCameraFollowSpeed(4.8f), m_moveSpeed(600.f), m_gravity(980.f), m_jumpPower(450.f),
-      WeaponSocketName(TEXT("WeaponSocket")), m_defaultFOV(90.f), m_aimFOV(60.f), m_aimInterpSpeed(10.f),
+      m_moveSpeed(600.f), m_gravity(980.f), m_jumpPower(450.f),
+      m_weaponSocketName(TEXT("WeaponSocket")), m_defaultFOV(90.f), m_aimFOV(60.f), m_aimInterpSpeed(10.f),
       m_defaultCameraSocketOffset(0.f, 100.f, 80.f), m_rifleAimCameraSocketOffset(0.f, 52.f, 76.f), m_defaultCameraArmLength(200.f),
       m_rifleAimCameraArmLength(235.f), m_aimCameraPositionInterpSpeed(9.f), m_rifleAimInwardYawOffset(0.f), m_rifleVisualConvergenceDistance(350.f),
       m_pUserWidget(nullptr), m_pPlayerHp(nullptr), m_pReloadUI(nullptr), m_pWeaponCarousel(nullptr), m_pEnemyLocatorWidget(nullptr),
@@ -37,10 +36,10 @@ APlayerChara::APlayerChara()
       m_idleState(EIdleState::InitialIdle), m_healItemCount(0), m_crosshairMaxDist(10000.f),
       //キャラクター移動を処理します。
       m_charaMovement(FVector2D::ZeroVector), m_cameraRotation(FVector2D::ZeroVector), m_defaultMeshRelativeRotation(FRotator::ZeroRotator),
-      m_backwardMoveDirection(FVector::ZeroVector), m_backwardCameraTargetWorldYaw(0.0f), m_idleTimerAccum(0.f), m_bJumping(false),
+      m_idleTimerAccum(0.f), m_bJumping(false),
       m_bCanControl(true), m_bIsAiming(false), m_bIsFiringRifle(false), m_bRifleCombatAim(false), m_bPendingRifleShot(false),
       m_bRifleTriggerHeld(false), m_bIsHealing(false), m_bHasAR(false), m_bIsReloadingAnim(false), m_bIsSwitchingWeapon(false),
-      m_bMovementLockedByAnimation(false), m_bCrosshairSuppressed(false), m_bIsDead(false), b_mBackwardCameraFollowActive(false)
+      m_bMovementLockedByAnimation(false), m_bCrosshairSuppressed(false), m_bIsDead(false)
 {
     PrimaryActorTick.bCanEverTick = true;
 
@@ -50,7 +49,6 @@ APlayerChara::APlayerChara()
 
     //カメラコンポーネントの生成と設定
     m_pSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
-    //「m_pSpringArm」が成立するとき、SetupAttachmentを呼び出します。
     if (m_pSpringArm)
     {
         m_pSpringArm->SetupAttachment(RootComponent);
@@ -66,7 +64,6 @@ APlayerChara::APlayerChara()
     }
 
     m_pCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-    //「m_pCamera && m_pSpringArm」が成立するとき、SetupAttachmentを呼び出します。
     if (m_pCamera && m_pSpringArm)
     {
         m_pCamera->SetupAttachment(m_pSpringArm, USpringArmComponent::SocketName);
@@ -92,8 +89,6 @@ APlayerChara::APlayerChara()
 
     m_pAudioComponent = CreateDefaultSubobject<UPlayerAudioComponent>(TEXT("PlayerAudioComponent"));
     m_pRifleAnimationComponent = CreateDefaultSubobject<UPlayerRifleAnimationComponent>(TEXT("PlayerRifleAnimationComponent"));
-
-    //PistolReloadは、PistolReloadの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> PistolReload(TEXT("/Game/Assets/Player/Animation/PistolReloading.PistolReloading"));
     //ライフルリロードを処理します。
     static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> RifleReload(
@@ -107,20 +102,14 @@ void APlayerChara::BeginPlay()
 {
     //ゲーム開始時に必要な参照を取得し、初期状態を整えます。
     Super::BeginPlay();
-
-    //「GetMesh()」が成立するとき、GetMeshを呼び出します。
     if (GetMesh())
     {
         m_defaultMeshRelativeRotation = GetMesh()->GetRelativeRotation();
     }
-
-    //「m_pRifleAnimationComponent」が成立するとき、OnAimReadyを呼び出します。
     if (m_pRifleAnimationComponent)
     {
         m_pRifleAnimationComponent->OnAimReady().AddUObject(this, &APlayerChara::HandleRifleAimReady);
     }
-
-    //「auto* mv = GetCharacterMovement()」が成立するとき、mv->AirControlを更新します。
     if (auto* mv = GetCharacterMovement())
     {
         mv->AirControl = 0.8f;
@@ -135,50 +124,42 @@ void APlayerChara::BeginPlay()
     //ピストル生成
     if (m_defaultWeapon && GetWorld())
     {
-        //spは、直後の初期化結果を、同じスコープ内でこの名前を参照する計算や関数呼び出しへ渡すために使います。
-        FActorSpawnParameters sp;
-        sp.Owner = this;
-        sp.Instigator = GetInstigator();
+        FActorSpawnParameters spawnParams;
+        spawnParams.Owner = this;
+        spawnParams.Instigator = GetInstigator();
         //ワールドを返します。
-        AWeaponBase* pistol = GetWorld()->SpawnActor<AWeaponBase>(m_defaultWeapon, FVector::ZeroVector, FRotator::ZeroRotator, sp);
-        //「pistol」が成立するとき、SetOwnerCharacterを呼び出します。
+        AWeaponBase* pistol = GetWorld()->SpawnActor<AWeaponBase>(m_defaultWeapon, FVector::ZeroVector, FRotator::ZeroRotator, spawnParams);
         if (pistol)
         {
             pistol->SetOwnerCharacter(this);
             pistol->SetOwner(this);
-            //「auto* mesh = GetMesh()」が成立するとき、rを呼び出します。
             if (auto* mesh = GetMesh())
             {
-                //rは、rの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
-                FAttachmentTransformRules r(EAttachmentRule::SnapToTarget, true);
-                pistol->AttachToComponent(mesh, r, WeaponSocketName);
+                FAttachmentTransformRules attachRules(EAttachmentRule::SnapToTarget, true);
+                pistol->AttachToComponent(mesh, attachRules, m_weaponSocketName);
             }
             m_pCurrentWeapon = pistol;
             m_pPistolWeapon = pistol;
-            EquippedWeapon = pistol;
+            m_pEquippedWeapon = pistol;
         }
     }
 
     //ナイフ生成（非表示待機）
     if (m_meleeWeaponClass)
     {
-        //spは、直後の初期化結果を、同じスコープ内でこの名前を参照する計算や関数呼び出しへ渡すために使います。
-        FActorSpawnParameters sp;
-        sp.Owner = this;
-        sp.Instigator = GetInstigator();
+        FActorSpawnParameters spawnParams;
+        spawnParams.Owner = this;
+        spawnParams.Instigator = GetInstigator();
         //ワールドを返します。
-        AMeleeWeapon* knife = GetWorld()->SpawnActor<AMeleeWeapon>(m_meleeWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, sp);
-        //「knife」が成立するとき、SetOwnerCharacterを呼び出します。
+        AMeleeWeapon* knife = GetWorld()->SpawnActor<AMeleeWeapon>(m_meleeWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, spawnParams);
         if (knife)
         {
             knife->SetOwnerCharacter(this);
             knife->SetOwner(this);
-            //「auto* mesh = GetMesh()」が成立するとき、rを呼び出します。
             if (auto* mesh = GetMesh())
             {
-                //rは、rの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
-                FAttachmentTransformRules r(EAttachmentRule::SnapToTarget, true);
-                knife->AttachToComponent(mesh, r, TEXT("KnifeSocket"));
+                FAttachmentTransformRules attachRules(EAttachmentRule::SnapToTarget, true);
+                knife->AttachToComponent(mesh, attachRules, TEXT("KnifeSocket"));
             }
             m_pKnifeWeapon = knife;
             knife->SetActorHiddenInGame(true);
@@ -187,32 +168,26 @@ void APlayerChara::BeginPlay()
 
     //BPでクラスが未設定でも、C++製のHP HUDを必ず表示します。
     const UZombieAttackUISettings* UISettings = GetDefault<UZombieAttackUISettings>();
-    //HealthWidgetClassは、UISettings->GetPlayerHealthWidgetClass()から構築した結果を後続の処理へ渡すために使います。
     TSubclassOf<UUserWidget> HealthWidgetClass = UISettings->GetPlayerHealthWidgetClass();
-    //「!HealthWidgetClass」が成立するとき、HealthWidgetClassを更新します。
     if (!HealthWidgetClass)
     {
         HealthWidgetClass = m_playerHPClass;
-        //「!HealthWidgetClass」が成立するとき、StaticClassを呼び出します。
         if (!HealthWidgetClass)
         {
             HealthWidgetClass = UPlayerHP::StaticClass();
         }
     }
-    //「HealthWidgetClass」が成立するとき、GetWorldを呼び出します。
     if (HealthWidgetClass)
     {
         m_pPlayerHp = CreateWidget<UUserWidget>(GetWorld(), HealthWidgetClass);
-        //「m_pPlayerHp」が成立するとき、AddToViewportを呼び出します。
         if (m_pPlayerHp)
         {
             m_pPlayerHp->AddToViewport(10);
             m_pPlayerHp->SetVisibility(ESlateVisibility::HitTestInvisible);
-            //「UPlayerHP* hp = Cast<UPlayerHP>(m_pPlayerHp)」が成立するとき、SetOwnerを呼び出します。
             if (UPlayerHP* hp = Cast<UPlayerHP>(m_pPlayerHp))
             {
                 hp->SetOwner(this);
-                OnDamaged.AddDynamic(hp, &UPlayerHP::UpdateHealthUI);
+                m_onDamaged.AddDynamic(hp, &UPlayerHP::UpdateHealthUI);
                 hp->UpdateHealthUI();
             }
         }
@@ -220,7 +195,6 @@ void APlayerChara::BeginPlay()
 
     //リロード UI
     m_pReloadUI = CreateWidget<UAmmoHUDWidget>(GetWorld(), UISettings->GetAmmoWidgetClass());
-    //「m_pReloadUI」が成立するとき、AddToViewportを呼び出します。
     if (m_pReloadUI)
     {
         m_pReloadUI->AddToViewport(15);
@@ -229,7 +203,6 @@ void APlayerChara::BeginPlay()
 
     //通常・エイム・撃破確認を単一Widgetで描画し、二重クロスヘアを防ぎます。
     m_pUserWidget = CreateWidget<UCombatCrosshairWidget>(GetWorld(), UISettings->GetCrosshairWidgetClass());
-    //「m_pUserWidget」が成立するとき、AddToViewportを呼び出します。
     if (m_pUserWidget)
     {
         m_pUserWidget->AddToViewport(30);
@@ -239,18 +212,14 @@ void APlayerChara::BeginPlay()
 
     //アウトライン対象のうち最寄りの敵を、回転する赤い方向矢印で案内します。
     m_pEnemyLocatorWidget = CreateWidget<UEnemyLocatorWidget>(GetWorld(), UISettings->GetEnemyLocatorWidgetClass());
-    //「m_pEnemyLocatorWidget」が成立するとき、AddToViewportを呼び出します。
     if (m_pEnemyLocatorWidget)
     {
         m_pEnemyLocatorWidget->AddToViewport(29);
         m_pEnemyLocatorWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
     }
-
-    //「m_weaponCarouselClass」が成立するとき、GetWorldを呼び出します。
     if (m_weaponCarouselClass)
     {
         m_pWeaponCarousel = CreateWidget<UWeaponCarouselWidget>(GetWorld(), m_weaponCarouselClass);
-        //「m_pWeaponCarousel」が成立するとき、AddToViewportを呼び出します。
         if (m_pWeaponCarousel)
         {
             //武器切り替えUIはHUDより前面に出します。
@@ -264,12 +233,9 @@ void APlayerChara::BeginPlay()
     }
     RebuildWeaponDisplayOrder();
     RefreshWeaponCarousel();
-
-    //「m_pCamera」が成立するとき、SetFieldOfViewを呼び出します。
     if (m_pCamera)
     {
         m_pCamera->SetFieldOfView(m_defaultFOV);
-        //「UMaterialInterface* outlineMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game…」が成立するとき、AddBlendableを呼び出します。
         if (UMaterialInterface* outlineMaterial =
                 LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Assets/Material/M_PP_EnemyOutline.M_PP_EnemyOutline")))
         {
@@ -281,39 +247,37 @@ void APlayerChara::BeginPlay()
 }
 
 //毎フレームの更新を行います。
-void APlayerChara::Tick(float DeltaTime)
+void APlayerChara::Tick(float _deltaTime)
 {
     //フレームごとの経過時間を使って、移動や表示の変化を更新します。
-    Super::Tick(DeltaTime);
-
-    //「m_bIsDead」が成立するとき、UpdateCameraを呼び出します。
+    Super::Tick(_deltaTime);
     if (m_bIsDead) { return; }
 
     //各種更新処理
-    UpdateCamera(DeltaTime);
-    UpdateMove(DeltaTime);
-    UpdateJump(DeltaTime);
-    UpdateCrosshair(DeltaTime);
-    UpdateIdleState(DeltaTime);
+    //撃破の一瞬だけ世界を遅くしても、照準を動かす手応えは変えない。
+    const float cameraDelta = m_killStopActive ? _deltaTime / FMath::Clamp(m_killHitStopTimeDilation, 0.01f, 1.0f) : _deltaTime;
+    UpdateCamera(cameraDelta);
+    UpdateMove(_deltaTime);
+    UpdateJump(_deltaTime);
+    UpdateCrosshair(_deltaTime);
+    UpdateIdleState(_deltaTime);
+    UpdateBufferedAttack();
 
     //FOV補間
     if (m_pCamera)
     {
         //エイム中かどうかを返します。
         const float target = IsAiming() ? m_aimFOV : m_defaultFOV;
-        m_pCamera->SetFieldOfView(FMath::FInterpTo(m_pCamera->FieldOfView, target, DeltaTime, m_aimInterpSpeed));
+        m_pCamera->SetFieldOfView(FMath::FInterpTo(m_pCamera->FieldOfView, target, _deltaTime, m_aimInterpSpeed));
     }
-    //「m_pSpringArm」が成立するとき、IsAimingを呼び出します。
     if (m_pSpringArm)
     {
         //エイム中かどうかを返します。
         const bool bRifleAimCamera = m_currentSlot == EWeaponSlot::AR && IsAiming();
-        //targetOffsetは、bRifleAimCamera ? m_rifleAimCameraSocketOffset : m_defaultCameraSocketO…から求めた空間情報を位置または向きの計算に使います。
         const FVector targetOffset = bRifleAimCamera ? m_rifleAimCameraSocketOffset : m_defaultCameraSocketOffset;
-        //targetArmLengthは、bRifleAimCamera ? m_rifleAimCameraArmLength : m_defaultCameraArmLengthから算出した数値を後続の判定または計算に使います。
         const float targetArmLength = bRifleAimCamera ? m_rifleAimCameraArmLength : m_defaultCameraArmLength;
-        m_pSpringArm->SocketOffset = FMath::VInterpTo(m_pSpringArm->SocketOffset, targetOffset, DeltaTime, m_aimCameraPositionInterpSpeed);
-        m_pSpringArm->TargetArmLength = FMath::FInterpTo(m_pSpringArm->TargetArmLength, targetArmLength, DeltaTime, m_aimCameraPositionInterpSpeed);
+        m_pSpringArm->SocketOffset = FMath::VInterpTo(m_pSpringArm->SocketOffset, targetOffset, _deltaTime, m_aimCameraPositionInterpSpeed);
+        m_pSpringArm->TargetArmLength = FMath::FInterpTo(m_pSpringArm->TargetArmLength, targetArmLength, _deltaTime, m_aimCameraPositionInterpSpeed);
     }
 
     //ストレーフ中は自動回転を常に無効
@@ -322,30 +286,30 @@ void APlayerChara::Tick(float DeltaTime)
 
 //入力バインド
 
-void APlayerChara::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+void APlayerChara::SetupPlayerInputComponent(UInputComponent* _pInputComp)
 {
-    //親クラスのSetupPlayerInputComponentを呼び出す
-    Super::SetupPlayerInputComponent(PlayerInputComponent);
+    //親クラスの入力設定を先に適用する
+    Super::SetupPlayerInputComponent(_pInputComp);
 
     //軸入力とアクション入力のバインド
-    PlayerInputComponent->BindAxis("MoveForward", this, &APlayerChara::Chara_MoveForward);
-    PlayerInputComponent->BindAxis("MoveRight", this, &APlayerChara::Chara_MoveRight);
-    PlayerInputComponent->BindAxis("CameraPitch", this, &APlayerChara::Cam_RotatePitch);
-    PlayerInputComponent->BindAxis("CameraYaw", this, &APlayerChara::Cam_RotateYaw);
-    PlayerInputComponent->BindAxis("WeaponWheel", this, &APlayerChara::OnWeaponWheel);
+    _pInputComp->BindAxis("MoveForward", this, &APlayerChara::Chara_MoveForward);
+    _pInputComp->BindAxis("MoveRight", this, &APlayerChara::Chara_MoveRight);
+    _pInputComp->BindAxis("CameraPitch", this, &APlayerChara::Cam_RotatePitch);
+    _pInputComp->BindAxis("CameraYaw", this, &APlayerChara::Cam_RotateYaw);
+    _pInputComp->BindAxis("WeaponWheel", this, &APlayerChara::OnWeaponWheel);
 
     //ジャンプ、攻撃、エイム、リロード、回復アイテム使用、武器切り替えのアクションバインド
-    PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &APlayerChara::JumpStart);
-    PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &APlayerChara::Attack);
-    PlayerInputComponent->BindAction("Fire", IE_Released, this, &APlayerChara::StopAttack);
-    PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &APlayerChara::StartAim);
-    PlayerInputComponent->BindAction("Aim", IE_Released, this, &APlayerChara::StopAim);
-    PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &APlayerChara::ReloadWeapon);
-    PlayerInputComponent->BindAction("Heal", IE_Pressed, this, &APlayerChara::UseHealItem);
-    PlayerInputComponent->BindAction("Slot1", IE_Pressed, this, &APlayerChara::SwitchToPistol);
-    PlayerInputComponent->BindAction("Slot2", IE_Pressed, this, &APlayerChara::SwitchToAR);
-    PlayerInputComponent->BindAction("Slot3", IE_Pressed, this, &APlayerChara::SwitchToKnife);
-    PlayerInputComponent->BindAction("NextWeapon", IE_Pressed, this, &APlayerChara::CycleNextWeapon);
-    PlayerInputComponent->BindAction("PreviousWeapon", IE_Pressed, this, &APlayerChara::CyclePreviousWeapon);
+    _pInputComp->BindAction("Jump", IE_Pressed, this, &APlayerChara::JumpStart);
+    _pInputComp->BindAction("Fire", IE_Pressed, this, &APlayerChara::Attack);
+    _pInputComp->BindAction("Fire", IE_Released, this, &APlayerChara::StopAttack);
+    _pInputComp->BindAction("Aim", IE_Pressed, this, &APlayerChara::StartAim);
+    _pInputComp->BindAction("Aim", IE_Released, this, &APlayerChara::StopAim);
+    _pInputComp->BindAction("Reload", IE_Pressed, this, &APlayerChara::ReloadWeapon);
+    _pInputComp->BindAction("Heal", IE_Pressed, this, &APlayerChara::UseHealItem);
+    _pInputComp->BindAction("Slot1", IE_Pressed, this, &APlayerChara::SwitchToPistol);
+    _pInputComp->BindAction("Slot2", IE_Pressed, this, &APlayerChara::SwitchToAR);
+    _pInputComp->BindAction("Slot3", IE_Pressed, this, &APlayerChara::SwitchToKnife);
+    _pInputComp->BindAction("NextWeapon", IE_Pressed, this, &APlayerChara::CycleNextWeapon);
+    _pInputComp->BindAction("PreviousWeapon", IE_Pressed, this, &APlayerChara::CyclePreviousWeapon);
 
 }

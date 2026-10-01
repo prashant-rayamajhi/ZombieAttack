@@ -13,7 +13,6 @@ void UAnimNotify_EnemyComboBranch::Notify(USkeletalMeshComponent* _meshComp, UAn
 
     //メッシュコンポーネントの所有者をAEnemyChara型にキャスト
     AEnemyChara* enemy = Cast<AEnemyChara>(_meshComp->GetOwner());
-    //「!enemy」が成立するとき、RequestComboBranchFromNotifyを呼び出します。
     if (!enemy) { return; }
 
     //敵のコンボ分岐処理を実行

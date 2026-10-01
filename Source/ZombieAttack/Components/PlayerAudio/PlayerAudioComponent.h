@@ -36,7 +36,6 @@ class ZOMBIEATTACK_API UPlayerAudioComponent : public UActorComponent
     void StopReloadSound(float _fadeOutDuration = 0.03f);
 
   private:
-    //CanPlayFootstepは、名前が示す条件の成立可否を呼び出し元へ返します。
     bool CanPlayFootstep() const;
 
   private:

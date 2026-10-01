@@ -24,7 +24,7 @@ class ZOMBIEATTACK_API UEnemyHP : public UUserWidget
     void UpdateHealthUI();
 
     //所有者を設定します。
-    void SetOwner(AEnemyChara* Enemy);
+    void SetOwner(AEnemyChara* _pEnemy);
 
   protected:
     //healthBarをゲーム処理から参照できるように管理します。

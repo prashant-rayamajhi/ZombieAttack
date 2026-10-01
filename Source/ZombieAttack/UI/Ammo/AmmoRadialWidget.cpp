@@ -30,17 +30,11 @@ class SAmmoRadial : public SLeafWidget
                           FSlateWindowElementList& _outDrawElements, int32 _layerID, const FWidgetStyle& _widgetStyle,
                           bool _bParentEnabled) const override
     {
-        //localSizeは、_allottedGeometry.GetLocalSize()から求めた空間情報を位置または向きの計算に使います。
         const FVector2D localSize = _allottedGeometry.GetLocalSize();
-        //centerは、localSize * 0.5fから求めた空間情報を位置または向きの計算に使います。
         const FVector2D center = localSize * 0.5f;
-        //shortestSideは、FMath::Min(localSize.X, localSize.Y)から算出した数値を後続の判定または計算に使います。
         const float shortestSide = FMath::Min(localSize.X, localSize.Y);
-        //outerRadiusは、shortestSide * 0.44fから算出した数値を後続の判定または計算に使います。
         const float outerRadius = shortestSide * 0.44f;
-        //innerRadiusは、shortestSide * 0.30fから算出した数値を後続の判定または計算に使います。
         const float innerRadius = shortestSide * 0.30f;
-        //drawEffectsは、_bParentEnabled ? ESlateDrawEffect::None : ESlateDrawEffect::DisabledEf…から構築した結果を後続の処理へ渡すために使います。
         const ESlateDrawEffect drawEffects = _bParentEnabled ? ESlateDrawEffect::None : ESlateDrawEffect::DisabledEffect;
 
         DrawArc(_allottedGeometry, _outDrawElements, _layerID, center, outerRadius, 1.0f, m_emptyColor, drawEffects);
@@ -56,18 +50,14 @@ class SAmmoRadial : public SLeafWidget
                  float _percent, const FLinearColor& _color, ESlateDrawEffect _drawEffects) const
     {
         constexpr int32 SegmentCount = 64;
-        //activeSegmentsは、FMath::Max(1, FMath::CeilToInt(SegmentCount * FMath::Clamp(_percent, 0.…から算出した数値を後続の判定または計算に使います。
         const int32 activeSegments = FMath::Max(1, FMath::CeilToInt(SegmentCount * FMath::Clamp(_percent, 0.0f, 1.0f)));
-        //pointsは、位置と向きの計算結果を移動、照準、または描画位置へ反映するために使います。
         TArray<FVector2D> points;
         points.Reserve(activeSegments + 1);
 
         //「int32 index = 0; index <= activeSegments; ++index」で列挙される各要素へ、ループ本体の判定と更新を適用します。
         for (int32 index = 0; index <= activeSegments; ++index)
         {
-            //normalizedは、static_cast<float>(index) / static_cast<float>(SegmentCount)から算出した数値を後続の判定または計算に使います。
             const float normalized = static_cast<float>(index) / static_cast<float>(SegmentCount);
-            //angleは、-HALF_PI + normalized * TWO_PIから算出した数値を後続の判定または計算に使います。
             const float angle = -HALF_PI + normalized * TWO_PI;
             points.Add(_center + FVector2D(FMath::Cos(angle), FMath::Sin(angle)) * _radius);
         }
@@ -76,17 +66,11 @@ class SAmmoRadial : public SLeafWidget
     }
 
   private:
-    //m_clipPercentは、1.0fから算出した数値を後続の判定または計算に使います。
     float m_clipPercent = 1.0f;
-    //m_reservePercentは、1.0fから算出した数値を後続の判定または計算に使います。
     float m_reservePercent = 1.0f;
-    //m_ringThicknessは、7.0fから算出した数値を後続の判定または計算に使います。
     float m_ringThickness = 7.0f;
-    //m_clipColorは、FLinearColor::Whiteから構築した結果を後続の処理へ渡すために使います。
     FLinearColor m_clipColor = FLinearColor::White;
-    //m_reserveColorは、FLinearColor(0.72f, 0.04f, 0.03f, 1.0f)から構築した結果を後続の処理へ渡すために使います。
     FLinearColor m_reserveColor = FLinearColor(0.72f, 0.04f, 0.03f, 1.0f);
-    //m_emptyColorは、FLinearColor(0.08f, 0.08f, 0.08f, 0.75f)から構築した結果を後続の処理へ渡すために使います。
     FLinearColor m_emptyColor = FLinearColor(0.08f, 0.08f, 0.08f, 0.75f);
 };
 
@@ -124,8 +108,6 @@ void UAmmoRadialWidget::SynchronizeProperties()
 {
     //Propertiesを実際の移動と同期させます。
     Super::SynchronizeProperties();
-
-    //「m_pSlateWidget.IsValid()」が成立するとき、SetValuesを呼び出します。
     if (m_pSlateWidget.IsValid())
     {
         m_pSlateWidget->SetValues(m_clipPercent, m_reservePercent, m_clipColor, m_reserveColor, m_emptyColor, m_ringThickness);

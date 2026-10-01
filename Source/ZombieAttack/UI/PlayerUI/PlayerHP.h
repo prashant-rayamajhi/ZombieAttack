@@ -26,13 +26,13 @@ class ZOMBIEATTACK_API UPlayerHP : public UUserWidget
     void UpdateHealthUI();
 
     //所有者を設定します。
-    void SetOwner(APlayerChara* Player);
+    void SetOwner(APlayerChara* _pPlayer);
 
   protected:
     //NativeOnInitializedは、Widget初期化時にイベント接続と固定UI要素の準備を行います。
     virtual void NativeOnInitialized() override;
     //NativeTickは、Widgetの毎フレーム更新を受け取り、表示アニメーションを進めます。
-    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+    virtual void NativeTick(const FGeometry& _geometry, float _deltaTime) override;
 
     //体力HUDを作成します。
     void BuildHealthHUD();

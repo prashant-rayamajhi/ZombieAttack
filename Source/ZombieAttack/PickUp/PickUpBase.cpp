@@ -43,10 +43,7 @@ APickUpBase::APickUpBase()
     m_pItemLightComp->SetIntensity(1800.0f);
     m_pItemLightComp->SetAttenuationRadius(280.0f);
     m_pItemLightComp->SetCastShadows(false);
-
-    //HealthIconは、HealthIconの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UTexture2D> HealthIcon(TEXT("/Game/UI/PickupIcons/T_HealthPickup.T_HealthPickup"));
-    //AmmoIconは、AmmoIconの名前で定義されたクラス固有の動作を実行し、その結果を呼び出し元へ反映します。
     static ConstructorHelpers::FObjectFinder<UTexture2D> AmmoIcon(TEXT("/Game/UI/PickupIcons/T_AmmoPickup.T_AmmoPickup"));
     m_pHealthIcon = HealthIcon.Object;
     m_pAmmoIcon = AmmoIcon.Object;
@@ -62,27 +59,20 @@ void APickUpBase::BeginPlay()
 }
 
 //毎フレームの更新を行います。
-void APickUpBase::Tick(float DeltaTime)
+void APickUpBase::Tick(float _deltaTime)
 {
     //フレームごとの経過時間を使って、移動や表示の変化を更新します。
-    Super::Tick(DeltaTime);
-    m_floatTime += DeltaTime;
-
-    //itemHeightAdjustmentは、m_itemType == EItemType::EIT_WeaponAR ? m_arWeaponFloatHeightAdjustment…から算出した数値を後続の判定または計算に使います。
+    Super::Tick(_deltaTime);
+    m_floatTime += _deltaTime;
     const float itemHeightAdjustment = m_itemType == EItemType::EIT_WeaponAR ? m_arWeaponFloatHeightAdjustment : 0.0f;
-    //ZOffsetは、m_floatHeight + itemHeightAdjustment + FMath::Sin(m_floatTime * m_float…から算出した数値を後続の判定または計算に使います。
     const float ZOffset = m_floatHeight + itemHeightAdjustment + FMath::Sin(m_floatTime * m_floatSpeed) * m_floatAmplitude;
     SetActorLocation(m_spawnLocation + FVector(0.f, 0.f, ZOffset));
-    AddActorWorldRotation(FRotator(0.f, m_rotateSpeed * DeltaTime, 0.f));
-
-    //pulseは、0.5f + 0.5f * FMath::Sin(m_floatTime * 3.2f)から算出した数値を後続の判定または計算に使います。
+    AddActorWorldRotation(FRotator(0.f, m_rotateSpeed * _deltaTime, 0.f));
     const float pulse = 0.5f + 0.5f * FMath::Sin(m_floatTime * 3.2f);
-    //「m_pItemIconComp」が成立するとき、SetRelativeScale3Dを呼び出します。
     if (m_pItemIconComp)
     {
         m_pItemIconComp->SetRelativeScale3D(FVector(FMath::Lerp(0.19f, 0.235f, pulse)));
     }
-    //「m_pItemLightComp」が成立するとき、SetIntensityを呼び出します。
     if (m_pItemLightComp)
     {
         m_pItemLightComp->SetIntensity(FMath::Lerp(1100.0f, 2200.0f, pulse));
@@ -90,10 +80,10 @@ void APickUpBase::Tick(float DeltaTime)
 }
 
 //アイテムを取得し、効果を反映します。
-void APickUpBase::PickUpItem(EItemType Type, float Value)
+void APickUpBase::PickUpItem(EItemType _itemType, float _amount)
 {
-    m_itemType = Type;
-    m_itemValue = Value;
+    m_itemType = _itemType;
+    m_itemValue = _amount;
     ApplyMeshByType();
 }
 
@@ -103,16 +93,12 @@ bool APickUpBase::HasPickupPresentation() const { return IsValid(m_pItemIconComp
 //MeshByTypeを対象へ適用します。
 void APickUpBase::ApplyMeshByType()
 {
-    //「!m_pMeshComp」が成立するとき、後続コードへ不正な参照や利用できない状態を渡さないようにします。
     if (!m_pMeshComp) { return; }
 
     //対象メッシュを保持します。
     UStaticMesh* TargetMesh = nullptr;
-    //iconTextureは、nullptrから取得した参照を後続の呼び出しで使います。
     UTexture2D* iconTexture = nullptr;
-    //glowColorは、FLinearColor(1.0f, 0.45f, 0.04f, 1.0f)から構築した結果を後続の処理へ渡すために使います。
     FLinearColor glowColor = FLinearColor(1.0f, 0.45f, 0.04f, 1.0f);
-    //現在の状態に合う処理へ分けます。
     switch (m_itemType)
     {
     case EItemType::EIT_Health:
@@ -131,7 +117,6 @@ void APickUpBase::ApplyMeshByType()
     case EItemType::EIT_WeaponAR:
         //対象メッシュを表す項目
         TargetMesh = m_pARWeaponMesh ? m_pARWeaponMesh.Get() : (m_pARAmmoMesh ? m_pARAmmoMesh.Get() : m_pAmmoMesh.Get());
-        //「!TargetMesh」が成立するとき、TargetMeshを更新します。
         if (!TargetMesh)
         {
             TargetMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Assets/Weapon/Mesh/SM_ARRifle.SM_ARRifle"));
@@ -143,18 +128,15 @@ void APickUpBase::ApplyMeshByType()
     }
 
     m_pMeshComp->SetStaticMesh(TargetMesh);
-    //「m_pItemIconComp」が成立するとき、SetSpriteを呼び出します。
     if (m_pItemIconComp)
     {
         m_pItemIconComp->SetSprite(iconTexture);
         m_pItemIconComp->SetVisibility(iconTexture != nullptr);
     }
-    //「m_pItemLightComp」が成立するとき、SetLightColorを呼び出します。
     if (m_pItemLightComp)
     {
         m_pItemLightComp->SetLightColor(glowColor);
     }
-    //「TargetMesh && m_itemType == EItemType::EIT_WeaponAR」が成立するとき、SetRelativeScale3Dを呼び出します。
     if (TargetMesh && m_itemType == EItemType::EIT_WeaponAR)
     {
         m_pMeshComp->SetRelativeScale3D(FVector(0.7f));
@@ -163,16 +145,12 @@ void APickUpBase::ApplyMeshByType()
 }
 
 //OverlapBeginが発生したときの処理を行います。
-void APickUpBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent,
-                                 int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void APickUpBase::OnOverlapBegin(UPrimitiveComponent* _pOverlappedComp, AActor* _pOtherActor, UPrimitiveComponent* _pOtherComp,
+                                 int32 _otherBodyIndex, bool _bFromSweep, const FHitResult& _sweepResult)
 {
-    //「m_bConsumed」が成立するとき、続けて「APlayerChara* Player = Cast<APlayerChara>(OtherActor)」を判定します。
     if (m_bConsumed) { return; }
-
-    //「APlayerChara* Player = Cast<APlayerChara>(OtherActor)」が成立するとき、続けて「!Player->PickUpItem(m_itemValue, m_itemType)」を判定します。
-    if (APlayerChara* Player = Cast<APlayerChara>(OtherActor))
+    if (APlayerChara* Player = Cast<APlayerChara>(_pOtherActor))
     {
-        //「!Player->PickUpItem(m_itemValue, m_itemType)」が成立するとき、m_bConsumedを更新します。
         if (!Player->PickUpItem(m_itemValue, m_itemType)) { return; }
 
         m_bConsumed = true;

@@ -4,12 +4,16 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
+#include "Blueprint/WidgetTree.h"
 
 //Widgetが画面へ追加されたときに表示内容を初期化します。
 void UWeaponSlotEntryWidget::NativeConstruct()
 {
     //Widgetが画面へ追加されたときに表示内容を初期化します。
     Super::NativeConstruct();
+    m_pSelectionBorder = WidgetTree ? Cast<UBorder>(WidgetTree->FindWidget(TEXT("SelectionBorder"))) : nullptr;
+    m_pWeaponIcon = WidgetTree ? Cast<UImage>(WidgetTree->FindWidget(TEXT("WeaponIcon"))) : nullptr;
+    m_pWeaponNameText = WidgetTree ? Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("WeaponNameText"))) : nullptr;
 }
 
 //武器スロット表示へアイコン、名称、選択状態を設定します。
@@ -24,46 +28,41 @@ void UWeaponSlotEntryWidget::Configure(EWeaponSlot _weaponSlot, const FText& _we
 {
     m_weaponSlot = _weaponSlot;
     m_bSelected = _bSelected;
-
-    //targetOpacityは、_bSelected ? _selectedOpacity : _inactiveOpacityから算出した数値を後続の判定または計算に使います。
+    //画面追加前の更新にも対応し、Blueprintの既存ウィジェット名から参照を取得する
+    if (WidgetTree)
+    {
+        m_pSelectionBorder = Cast<UBorder>(WidgetTree->FindWidget(TEXT("SelectionBorder")));
+        m_pWeaponIcon = Cast<UImage>(WidgetTree->FindWidget(TEXT("WeaponIcon")));
+        m_pWeaponNameText = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("WeaponNameText")));
+    }
     const float targetOpacity = _bSelected ? _selectedOpacity : _inactiveOpacity;
-    //targetScaleは、_bSelected ? _selectedScale : _inactiveScaleから算出した数値を後続の判定または計算に使います。
     const float targetScale = _bSelected ? _selectedScale : _inactiveScale;
 
     SetRenderOpacity(targetOpacity);
     SetRenderScale(FVector2D(targetScale, targetScale));
-
-    //「WeaponNameText」が成立するとき、SetTextを呼び出します。
-    if (WeaponNameText)
+    if (m_pWeaponNameText)
     {
-        WeaponNameText->SetText(_weaponName);
-        WeaponNameText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+        m_pWeaponNameText->SetText(_weaponName);
+        m_pWeaponNameText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
     }
-
-    //「WeaponIcon」が成立するとき、続けて「_weaponIcon」を判定します。
-    if (WeaponIcon)
+    if (m_pWeaponIcon)
     {
-        //「_weaponIcon」が成立するとき、SetVisibilityを呼び出します。
         if (_weaponIcon)
         {
-            WeaponIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
-            WeaponIcon->SetBrushFromTexture(_weaponIcon, true);
-            WeaponIcon->SetDesiredSizeOverride(FVector2D(48.0f, 48.0f));
+            m_pWeaponIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
+            m_pWeaponIcon->SetBrushFromTexture(_weaponIcon, true);
+            m_pWeaponIcon->SetDesiredSizeOverride(FVector2D(48.0f, 48.0f));
         }
         else
         {
             //FSlateBrush()を使うとSlateCoreリンクエラーになる場合があるため、非表示で対応します。
-            WeaponIcon->SetVisibility(ESlateVisibility::Collapsed);
+            m_pWeaponIcon->SetVisibility(ESlateVisibility::Collapsed);
         }
     }
-
-    //「SelectionBorder」が成立するとき、selectedColorを呼び出します。
-    if (SelectionBorder)
+    if (m_pSelectionBorder)
     {
-        //selectedColorは、0.55f, 0.05f, 0.06f, 0.95f)から構築した結果を後続の処理へ渡すために使います。
         const FLinearColor selectedColor(0.55f, 0.05f, 0.06f, 0.95f);
-        //inactiveColorは、0.02f, 0.02f, 0.02f, 0.35f)から構築した結果を後続の処理へ渡すために使います。
         const FLinearColor inactiveColor(0.02f, 0.02f, 0.02f, 0.35f);
-        SelectionBorder->SetBrushColor(_bSelected ? selectedColor : inactiveColor);
+        m_pSelectionBorder->SetBrushColor(_bSelected ? selectedColor : inactiveColor);
     }
 }
