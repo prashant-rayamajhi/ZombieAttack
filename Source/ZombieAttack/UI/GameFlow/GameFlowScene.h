@@ -5,6 +5,7 @@
 class UCameraComponent;
 class USkeletalMeshComponent;
 class UPointLightComponent;
+class USpotLightComponent;
 class UAnimSequence;
 //本編の森とプレイヤーを使う、メニュー専用の動く背景。
 UCLASS()
@@ -21,6 +22,10 @@ public:
     //読みやすさを損なわない範囲でカメラと照明を動かす。
     virtual void Tick(float _deltaTime) override;
 private:
+    //顔と装備を照らし、場面に合わせて白色と朝日の色を切り替える人物専用ライト。
+    UPROPERTY(VisibleAnywhere)
+    TObjectPtr<USpotLightComponent> m_portraitLight;
+
     //画面左にボタンの余白を残す視点。
     UPROPERTY(VisibleAnywhere)
     TObjectPtr<UCameraComponent> m_camera;

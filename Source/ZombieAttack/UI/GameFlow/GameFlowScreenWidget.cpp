@@ -107,7 +107,10 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
 
     //背景を少し暗くして、どの解像度でも文字の可読性を保ちます。
     UBorder* Shade = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("BackgroundShade"));
-    Shade->SetBrushColor(m_backgroundShade);
+    //文字の背後は専用グラデーションが受け持つため、人物まで暗幕で覆わない。
+    FLinearColor shadeColor = m_backgroundShade;
+    shadeColor.A = FMath::Min(shadeColor.A, 0.06f);
+    Shade->SetBrushColor(shadeColor);
     UOverlaySlot* ShadeSlot = RootOverlay->AddChildToOverlay(Shade);
     ShadeSlot->SetHorizontalAlignment(HAlign_Fill);
     ShadeSlot->SetVerticalAlignment(VAlign_Fill);
@@ -117,11 +120,19 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
     MenuSlot->SetHorizontalAlignment(HAlign_Left);
     MenuSlot->SetVerticalAlignment(VAlign_Center);
     MenuSlot->SetPadding(m_menuPadding);
+    //作品名と操作メニューの前に、三画面共通の短い状況表示を置く。
+    UTextBlock* chapter = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SceneChapter"));
+    const TCHAR* chapterText = _screen == EGameFlowScreen::Start ? TEXT("SURVIVAL / INFECTED FOREST") :
+        (_screen == EGameFlowScreen::Clear ? TEXT("EXTRACTION / DAYBREAK") : TEXT("SIGNAL LOST / IN THE FOREST"));
+    chapter->SetText(FText::AsCultureInvariant(chapterText));
+    chapter->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 13, TEXT("Bold")));
+    chapter->SetColorAndOpacity(FSlateColor(FLinearColor(0.68f, 0.75f, 0.72f)));
+    Menu->AddChildToVerticalBox(chapter)->SetPadding(FMargin(2, 0, 0, 18));
     UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
     Title->SetText(m_titleOverride.IsEmpty() ? GetTitle(_screen) : m_titleOverride);
     Title->SetColorAndOpacity(
         FSlateColor(_screen == EGameFlowScreen::GameOver ? FLinearColor(0.82f, 0.04f, 0.03f, 1.f) : FLinearColor(0.92f, 0.94f, 0.91f, 1.f)));
-    Title->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), m_titleFontSize, TEXT("Bold")));
+    Title->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), FMath::Min(m_titleFontSize, 48), TEXT("Bold")));
     Title->SetShadowOffset(FVector2D(3.f, 3.f));
     Title->SetShadowColorAndOpacity(FLinearColor::Black);
     Menu->AddChildToVerticalBox(Title);
@@ -133,7 +144,7 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
     SubtitleSlot->SetPadding(FMargin(2.f, 4.f, 0.f, 30.f));
 
     const FText PrimaryLabel =
-        _screen == EGameFlowScreen::Start ? FText::AsCultureInvariant(TEXT("GAME START")) : FText::AsCultureInvariant(TEXT("RETRY"));
+        _screen == EGameFlowScreen::Start ? FText::AsCultureInvariant(TEXT("ENTER THE FOREST")) : FText::AsCultureInvariant(TEXT("PLAY AGAIN"));
     m_pPrimaryButton = AddMenuButton(Menu, PrimaryLabel, TEXT("PrimaryButton"));
     m_pPrimaryButton->OnClicked.AddDynamic(this, &UGameFlowScreenWidget::HandlePrimaryAction);
     if (_screen != EGameFlowScreen::Start)

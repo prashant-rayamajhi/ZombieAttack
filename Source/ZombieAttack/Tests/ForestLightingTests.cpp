@@ -16,6 +16,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Animation/AnimSequence.h"
+#include "ZombieAttack/DayNightCycle/DayNightCycleManager.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
 
 //本編の配置カメラを順番に撮影し、露出を変えた後の森と進路を確認する。
 class FForestLightingCapture : public IAutomationLatentCommand
@@ -114,9 +117,9 @@ bool FForestLightingTest::RunTest(const FString& _parameters)
     for (TActorIterator<ACameraActor> camera(world); camera; ++camera)
     {
         const FString name = camera->GetActorLabel();
-        if (name == TEXT("CAM_PlayerIntro") || name == TEXT("CAM_Spawn2") || name == TEXT("CAM_Goal")) { views.Add(*camera); }
+        if (name == TEXT("CAM_PlayerIntro") || name.StartsWith(TEXT("CAM_Spawn")) || name == TEXT("CAM_Goal")) { views.Add(*camera); }
     }
-    TestEqual(TEXT("three lighting viewpoints"), views.Num(), 3);
+    TestEqual(TEXT("five lighting viewpoints"), views.Num(), 5);
     FActorSpawnParameters spawn;
     spawn.ObjectFlags |= RF_Transient;
     AActor* rig = world->SpawnActor<AActor>(spawn);
@@ -133,6 +136,30 @@ bool FForestLightingTest::RunTest(const FString& _parameters)
     capture->TextureTarget = target;
     FAssetCompilingManager::Get().FinishAllCompilation();
     ADD_LATENT_AUTOMATION_COMMAND(FForestLightingCapture(this, capture, views));
+    return true;
+}
+
+//固定照明のレベルで、開始後や時間経過後に太陽が昼夜設定へ戻らないことを確認する。
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFixedDawnTest, "ZombieAttack.World.FixedDawn",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FFixedDawnTest::RunTest(const FString& _parameters)
+{
+    //ゲーム用ワールドを分離し、開いているマップの照明を変更せずに開始処理を試す。
+    UWorld* world = UWorld::CreateWorld(EWorldType::Game, false);
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(world);
+    ADirectionalLight* sun = world->SpawnActor<ADirectionalLight>();
+    const FRotator dawn(-12.0f, 110.0f, 0.0f);
+    sun->SetActorRotation(dawn);
+    sun->GetLightComponent()->SetIntensity(1.2f);
+    ADayNightCycleManager* cycle = world->SpawnActor<ADayNightCycleManager>();
+    cycle->DispatchBeginPlay();
+    //昼夜周期を越える更新でも、固定した朝日の向きと照度を維持する。
+    cycle->Tick(240.0f);
+    TestTrue(TEXT("dawn rotation is preserved"), sun->GetActorRotation().Equals(dawn));
+    TestEqual(TEXT("dawn intensity is preserved"), sun->GetLightComponent()->Intensity, 1.2f);
+    TestFalse(TEXT("fixed lighting does not tick"), cycle->IsActorTickEnabled());
+    GEngine->DestroyWorldContext(world);
+    world->DestroyWorld(false);
     return true;
 }
 #endif

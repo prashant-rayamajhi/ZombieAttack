@@ -21,6 +21,10 @@ class ZOMBIEATTACK_API ADayNightCycleManager : public AActor
     ADayNightCycleManager();
 
   protected:
+    //朝霧などレベルで調整した照明を維持し、昼夜更新による露出の上書きを止めます。
+    UPROPERTY(EditAnywhere, Category = "DayNight")
+    bool m_useLevelLighting = true;
+
     //ゲーム開始時の初期設定を行います。
     virtual void BeginPlay() override;
 

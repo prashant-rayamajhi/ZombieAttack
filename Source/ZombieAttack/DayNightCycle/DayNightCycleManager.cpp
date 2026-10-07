@@ -23,6 +23,9 @@ void ADayNightCycleManager::BeginPlay()
     //ゲーム開始時に必要な参照を取得し、初期状態を整えます。
     Super::BeginPlay();
 
+    //固定時刻のステージではエディタの照明をそのまま使い、不要な毎フレーム更新も止めます。
+    if (m_useLevelLighting) { SetActorTickEnabled(false); return; }
+
     //配置済みのPostProcessVolumeを本編用の露出へ統一します。
     ApplyGameplayPostProcess();
 
@@ -86,7 +89,7 @@ void ADayNightCycleManager::Tick(float _deltaTime)
     Super::Tick(_deltaTime);
 
     //無効な周期では除算を行わず、現在の照明を維持します。
-    if (m_dayLength <= 0.f) { return; }
+    if (m_useLevelLighting || m_dayLength <= 0.f) { return; }
 
     m_timeOfDay += _deltaTime / m_dayLength;
     //一日の終端を越えた時刻を先頭へ戻します。
