@@ -39,6 +39,11 @@ Content/
 SourceAssets/
 ThirdPartySource/
 
+# Local editor helpers, automated tests, and maintenance scripts
+/Source/ZombieAttack/Editor/
+/Source/ZombieAttack/Tests/
+/Tools/
+
 # Operating system and editor files
 .DS_Store
 Thumbs.db
