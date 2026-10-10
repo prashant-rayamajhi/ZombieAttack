@@ -24,6 +24,8 @@ class ZOMBIEATTACK_API AGameFlowGameMode : public AGameModeBase
   protected:
     //StartPlayは、名前が示す動作を開始するための初期状態を整えます。
     virtual void StartPlay() override;
+    //自動破棄しないBGMを停止し、GameMode終了後に音源を残さない。
+    virtual void EndPlay(const EEndPlayReason::Type _reason) override;
     //HandleStartingNewPlayer_Implementationは、参加したPlayerControllerの開始処理を行い、ゲーム用PawnまたはUIを準備します。
     virtual void HandleStartingNewPlayer_Implementation(APlayerController* _newPlayer) override;
     virtual void RestartPlayer(AController* _newPlayer) override;

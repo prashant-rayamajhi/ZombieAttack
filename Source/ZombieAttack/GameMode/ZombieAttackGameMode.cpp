@@ -31,6 +31,18 @@ void AZombieAttackGameMode::StartPlay()
     }
 }
 
+//同じワールド内でGameModeを破棄しても、再生中のBGMと登録済み音源を回収する。
+void AZombieAttackGameMode::EndPlay(const EEndPlayReason::Type _reason)
+{
+    if (IsValid(m_gameplayMusicComponent))
+    {
+        m_gameplayMusicComponent->Stop();
+        m_gameplayMusicComponent->DestroyComponent();
+    }
+    m_gameplayMusicComponent = nullptr;
+    Super::EndPlay(_reason);
+}
+
 //参加したプレイヤーを本編用Pawnへ割り当てます。
 void AZombieAttackGameMode::HandleStartingNewPlayer_Implementation(APlayerController* _newPlayer)
 {

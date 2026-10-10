@@ -38,6 +38,8 @@ class ZOMBIEATTACK_API AIntroCutsceneDirector : public AActor
   protected:
     //ゲーム開始時に呼ばれる関数
     virtual void BeginPlay() override;
+    //途中でDirectorを破棄しても、生成したカメラをワールドへ残さない。
+    virtual void EndPlay(const EEndPlayReason::Type _reason) override;
 
     //毎フレーム呼ばれる関数
     virtual void Tick(float _deltaTime) override;

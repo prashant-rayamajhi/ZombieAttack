@@ -853,12 +853,30 @@ void AIntroCutsceneDirector::FinishCutscene()
     if (IsValid(m_runtimeCamera))
     {
         m_runtimeCamera->SetActorHiddenInGame(true);
+        //プレイヤーカメラへの補間に必要な時間だけ残し、補間完了後に回収する。
+        m_runtimeCamera->SetLifeSpan(FMath::Max(0.01f, m_returnBlendTime + 0.1f));
     }
     if (m_cinematicFillLight)
     {
         m_cinematicFillLight->SetVisibility(false);
     }
 
+}
+
+//レベル内でDirectorだけが破棄された場合も、視点を戻して専用カメラを回収する。
+void AIntroCutsceneDirector::EndPlay(const EEndPlayReason::Type _reason)
+{
+    if (_reason == EEndPlayReason::Destroyed && m_playerController.IsValid() && m_bCutscenePlaying)
+    {
+        if (m_playerPawn.IsValid()) { m_playerController->SetViewTarget(m_playerPawn.Get()); }
+        if (m_playerController->PlayerCameraManager) { m_playerController->PlayerCameraManager->StopCameraFade(); }
+        if (m_bDisablePlayerControlDuringCutscene) { SetPlayerControlEnabled(true); }
+        SetCutsceneCrosshairSuppressed(false);
+    }
+    if (IsValid(m_runtimeCamera)) { m_runtimeCamera->Destroy(); }
+    m_runtimeCamera = nullptr;
+    m_hudRevealEntries.Empty();
+    Super::EndPlay(_reason);
 }
 
 //プレイヤーの操作を有効化または無効化する関数

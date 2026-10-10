@@ -160,6 +160,9 @@ void AMeleeWeapon::PerformSweep()
 //Comboを解除します。
 void AMeleeWeapon::ResetCombo()
 {
+    //状態だけでなく次段の再生予約も取り消し、武器をしまった後の攻撃を防ぐ。
+    GetWorldTimerManager().ClearTimer(m_comboResetTimer);
+    GetWorldTimerManager().ClearTimer(m_cooldownTimer);
     m_currentComboIndex = 0;
     m_bIsAttacking = false;
     m_bComboQueued = false;

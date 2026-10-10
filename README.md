@@ -15,7 +15,7 @@ Pistol・AR・Knifeを切り替え、通常敵・中間ボス・ラストボス�
 | ジャンル | 三人称視点のゾンビアクション |
 | 制作形態 | 個人制作 |
 | 制作期間 | 約1.5か月（2025年9月22日〜2025年11月7日） |
-| 継続改善 | 制作期間後も調整を継続。本READMEは2026年10月7日の公開更新に対応 |
+| 継続改善 | 制作期間後も調整を継続。本READMEは2026年10月10日のメモリー解放処理の公開更新に対応 |
 | 使用エンジン | Unreal Engine 5.7（ローカル検証：5.7.4） |
 | 使用言語・環境 | C++、Visual Studio 2022、Windows |
 | 主な使用技術 | AI Perception、Navigation System、AnimInstance、AnimMontage、AnimNotify、UMG、Niagara |
@@ -26,6 +26,8 @@ Pistol・AR・Knifeを切り替え、通常敵・中間ボス・ラストボス�
 
 ### 直近の更新
 
+- プレイヤー終了時に、所有武器・HUD・タイマー・通知登録を片付ける処理を追加。
+- 導入演出の専用カメラと、本編・メニューのBGMを終了時に回収する処理を追加。
 - 本編の照明を朝方の低い光と霧へ調整。エディタで設定した明るさをゲーム開始後も維持する設定を追加。
 - スタート・クリア・ゲームオーバーの人物照明、森林の配置、地面の素材、見出しと操作ボタンを見直し。
 - 照明確認を5地点へ拡大し、固定照明が時間経過で変更されない回帰テストを追加。
@@ -96,6 +98,14 @@ Mixamo素材の最上位ボーンが腰の場合、ルートを一律に固定�
 スタート・クリア・オーバーは本編のプレイヤーと森林素材を使う3D背景とし、人物用のスポットライトを追加しました。HUDでは装填弾と予備弾を二重円で表し、装填弾が少なくなると数字の色を変えます。
 
 主要コード：[`IntroCutsceneDirector.cpp`](Source/ZombieAttack/Cutscene/IntroCutsceneDirector.cpp)、[`GameFlowScene.cpp`](Source/ZombieAttack/UI/GameFlow/GameFlowScene.cpp)、[`EnemyLocatorWidget.cpp`](Source/ZombieAttack/UI/EnemyUI/EnemyLocatorWidget.cpp)
+
+### 6. 生成した武器・HUD・カメラの寿命を管理する
+
+プレイヤーを破棄しても、別Actorとして生成した武器やViewportへ追加したHUDは、同じタイミングで片付くとは限りません。`EndPlay`で所有する武器を重複なく破棄し、HUDを画面から外して参照を解除します。タイマーや通知登録も解除し、終了したプレイヤーに予約処理が届かないようにしています。
+
+導入演出のカメラは、プレイヤーカメラへの補間が終わるまで残してから回収します。演出を途中で破棄した場合にも専用カメラを回収します。本編とメニューのBGMは、自動破棄に頼らず停止とコンポーネントの破棄を行います。
+
+主要コード：[`PlayerCharaVitals.cpp`](Source/ZombieAttack/Player/PlayerCharaVitals.cpp)、[`IntroCutsceneDirector.cpp`](Source/ZombieAttack/Cutscene/IntroCutsceneDirector.cpp)、[`ZombieAttackGameMode.cpp`](Source/ZombieAttack/GameMode/ZombieAttackGameMode.cpp)、[`GameFlowGameMode.cpp`](Source/ZombieAttack/UI/GameFlow/GameFlowGameMode.cpp)
 
 ## 発生した問題と改善内容
 
@@ -184,3 +194,11 @@ Config/             入力・画面・パッケージ設定
 | 武器の順送り | マウスホイール | LB / RB |
 
 ARは入手後に使用できます。S入力では正面を向いたまま後退します。
+
+## 検証と公開範囲
+
+2026年10月10日、今回の解放処理を含むローカルプロジェクトでUnreal Engine 5.7.4のEditorビルドとShippingパッケージ作成が成功しました。自動テスト23件も成功しています。プレイヤー資源のテストでは生成と終了を10回繰り返し、武器・HUDの参照解除とガベージコレクション後の回収を確認しました。
+
+これは長時間プレイのメモリー計測や、すべての経路でリークがないことを保証する結果ではありません。また、検証対象のローカル版には今回の公開差分以外の調整も含まれます。
+
+このリポジトリはコード閲覧用です。外部素材を含むContent、実行版、Editor用補助コード、Tests、Toolsは公開していません。このリポジトリだけではゲーム画面を含む完全な起動・再検証はできません。

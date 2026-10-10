@@ -33,6 +33,18 @@ void AGameFlowGameMode::StartPlay()
     if (scene) { scene->SetScene(level == TEXT("GameClear") ? 1 : level == TEXT("GameOver") ? 2 : 0); }
 }
 
+//同じワールド内でGameModeを破棄しても、再生中のBGMと登録済み音源を回収する。
+void AGameFlowGameMode::EndPlay(const EEndPlayReason::Type _reason)
+{
+    if (IsValid(m_screenMusicComponent))
+    {
+        m_screenMusicComponent->Stop();
+        m_screenMusicComponent->DestroyComponent();
+    }
+    m_screenMusicComponent = nullptr;
+    Super::EndPlay(_reason);
+}
+
 //参加したプレイヤーを本編用Pawnへ割り当てます。
 void AGameFlowGameMode::HandleStartingNewPlayer_Implementation(APlayerController* _newPlayer)
 {

@@ -2,7 +2,14 @@
 #include "../Components/PlayerAudio/PlayerAudioComponent.h"
 #include "../Weapon/ARWeapon.h"
 #include "../Weapon/GunWeapon.h"
+#include "../Weapon/MeleeWeapon.h"
 #include "../Weapon/WeaponBase.h"
+#include "../Components/RifleAnimation/PlayerRifleAnimationComponent.h"
+#include "../UI/Ammo/AmmoHUDWidget.h"
+#include "../UI/PlayerUI/CombatCrosshairWidget.h"
+#include "../UI/PlayerUI/WeaponCarouselWidget.h"
+#include "../UI/EnemyUI/EnemyLocatorWidget.h"
+#include "Blueprint/UserWidget.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -69,6 +76,39 @@ void APlayerChara::EndPlay(const EEndPlayReason::Type _reason)
 {
     RestoreKillHitStop();
     m_attackBuffer.Clear();
+    //同じワールド内でPawnを再生成しても、旧Pawnの予約攻撃や回復を実行しない。
+    GetWorldTimerManager().ClearAllTimersForObject(this);
+    if (m_pKnifeWeapon) { m_pKnifeWeapon->ResetCombo(); }
+    if (m_pAudioComponent) { m_pAudioComponent->StopReloadSound(0.0f); }
+    if (m_pRifleAnimationComponent)
+    {
+        m_pRifleAnimationComponent->OnAimReady().RemoveAll(this);
+        m_pRifleAnimationComponent->StopAimSequence(0.0f);
+    }
+    //Viewportへの登録はPawnと別の寿命を持つため、五種類のHUDを明示的に取り外す。
+    m_onDamaged.Clear();
+    if (m_pReloadUI) { m_pReloadUI->SetWeapon(nullptr); }
+    UUserWidget* widgets[] = {m_pUserWidget, m_pPlayerHp, m_pReloadUI, m_pWeaponCarousel, m_pEnemyLocatorWidget};
+    for (UUserWidget* widget : widgets)
+    {
+        if (IsValid(widget)) { widget->RemoveFromParent(); }
+    }
+    m_pUserWidget = nullptr;
+    m_pPlayerHp = nullptr;
+    m_pReloadUI = nullptr;
+    m_pWeaponCarousel = nullptr;
+    m_pEnemyLocatorWidget = nullptr;
+    //AttachやOwner指定だけでは武器Actorは破棄されない。重複する装備参照をまとめて一度ずつ破棄する。
+    TSet<AActor*> weapons = {m_pPistolWeapon, m_pKnifeWeapon, m_pARWeapon, m_pCurrentWeapon.Get(), m_pEquippedWeapon.Get()};
+    for (AActor* weapon : weapons)
+    {
+        if (IsValid(weapon) && weapon->GetOwner() == this) { weapon->Destroy(); }
+    }
+    m_pPistolWeapon = nullptr;
+    m_pKnifeWeapon = nullptr;
+    m_pARWeapon = nullptr;
+    m_pCurrentWeapon = nullptr;
+    m_pEquippedWeapon = nullptr;
     Super::EndPlay(_reason);
 }
 
