@@ -6,7 +6,7 @@ Pistol・AR・Knifeを切り替え、通常敵・中間ボス・ラストボス�
 
 狙った場所へ撃つこと、手足が届く瞬間に攻撃が当たること、敵が一斉に同じ行動を取らないことを重視しています。ゲームルールはC++で管理し、素材や演出の設定はUnreal Editor・Blueprint側で調整する構成です。
 
-**[プレイ動画](https://drive.google.com/file/d/1ezazuAM-6t2Oc3je9asIbnAP9bNGCkFo/view) · [担当範囲](#担当範囲) · [技術的に工夫した点](#技術的に工夫した点) · [問題と改善](#発生した問題と改善内容) · [主要コード](#特に見てほしいコード) · [検証](#検証と公開範囲)**
+**[旧プレイ動画](https://drive.google.com/file/d/1ezazuAM-6t2Oc3je9asIbnAP9bNGCkFo/view) · [新プレイ動画]([https://drive.google.com/file/d/1ezazuAM-6t2Oc3je9asIbnAP9bNGCkFo/view](https://drive.google.com/file/d/1NP7d6GLB5NhSRxpCJDCnDE9Tzm09YqlL/view?usp=sharing)) ·　[担当範囲](#担当範囲) · [技術的に工夫した点](#技術的に工夫した点) · [問題と改善](#発生した問題と改善内容) · [主要コード](#特に見てほしいコード) · [検証](#検証と公開範囲)**
 
 ## 基本情報
 
