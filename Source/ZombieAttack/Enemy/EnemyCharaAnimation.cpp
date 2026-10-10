@@ -16,6 +16,10 @@ void AEnemyChara::SetLocomotionAssets(const TCHAR* _folder, const TCHAR* _idle, 
     m_walkAnimation = loadSequence(_walk);
     m_runAnimation = loadSequence(_run);
     m_alertAnimation = loadSequence(_alert);
+    //種別フォルダ内の専用クリップを参照し、別モデルのアニメーションを直接混ぜない。
+    const FString folder = FPaths::GetPath(FString(_folder)) / TEXT("Generated");
+    m_strafeLeft = LoadObject<UAnimSequence>(nullptr, *(folder / TEXT("Strafe_Left.Strafe_Left")));
+    m_strafeRight = LoadObject<UAnimSequence>(nullptr, *(folder / TEXT("Strafe_Right.Strafe_Right")));
 }
 
 //同一Skeletonのクリップが揃った時だけ共通の移動評価へ切り替える
@@ -23,11 +27,21 @@ void AEnemyChara::InitializeEnemyAnimation()
 {
     USkeletalMeshComponent* mesh = GetMesh();
     const USkeletalMesh* asset = mesh ? mesh->GetSkeletalMeshAsset() : nullptr;
+    if (mesh)
+    {
+        //背後の敵も手足の接触位置を更新し、最後に画面へ映った位置で攻撃判定しない。
+        mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+        //短い接触区間を間引かず、骨の更新後に行う攻撃掃引と同じフレームへ揃える。
+        mesh->bEnableUpdateRateOptimizations = false;
+    }
     if (!asset || !m_idleAnimation || !m_walkAnimation || !m_runAnimation) { return; }
     for (const UAnimSequence* sequence : {m_idleAnimation.Get(), m_walkAnimation.Get(), m_runAnimation.Get()})
     {
         if (sequence->GetSkeleton() != asset->GetSkeleton()) { return; }
     }
+    //BPで横移動を差し替えた場合も、別の骨構成を移動姿勢へ混ぜない。
+    if (m_strafeLeft && m_strafeLeft->GetSkeleton() != asset->GetSkeleton()) { m_strafeLeft = nullptr; }
+    if (m_strafeRight && m_strafeRight->GetSkeleton() != asset->GetSkeleton()) { m_strafeRight = nullptr; }
     mesh->SetAnimInstanceClass(UEnemyAnimInstance::StaticClass());
     if (UAnimInstance* instance = mesh->GetAnimInstance())
     {

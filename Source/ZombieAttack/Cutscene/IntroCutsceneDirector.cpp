@@ -602,11 +602,14 @@ void AIntroCutsceneDirector::UpdateCinematicCamera(float _deltaTime)
     {
         m_holdElapsedTime += _deltaTime;
         //静止画に見えない程度の短い寄りに限定し、木を横切る大きな移動を避ける。
-        const float hold = FMath::Max(2.4f, m_holdDurationAtTarget);
+        //出口は目的地として長めに見せ、通常敵は短く、最後のプレイヤーへ間を空けずに戻す。
+        const AActor* subject = m_viewTargets[m_currentTargetIndex];
+        const float shotLength = subject == m_playerPawn.Get() ? 0.9f : (Cast<AGoalActor>(subject) ? 2.8f : 1.8f);
+        const float hold = FMath::Max(shotLength, m_holdDurationAtTarget);
         const float progress = EaseInOut(FMath::Clamp(m_holdElapsedTime / hold, 0.0f, 1.0f));
         const FVector start = m_moveStartTransform.GetLocation();
         const FVector forward = m_moveStartTransform.GetRotation().GetForwardVector();
-        const FVector desired = start + forward * (progress * 35.0f);
+        const FVector desired = start + forward * (progress * 22.0f);
         if (m_viewTargets[m_currentTargetIndex] != m_playerPawn.Get())
         {
             const FVector safe = ResolveTravelCollision(m_runtimeCamera->GetActorLocation(), desired);

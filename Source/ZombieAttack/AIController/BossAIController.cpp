@@ -181,8 +181,8 @@ bool ABossAIController::MoveToTacticalLocation(const FVector& _desiredLocation, 
     FNavLocation projected;
     if (!NavSystem->ProjectPointToNavigation(_desiredLocation, projected, m_navProjectionExtent)) { return false; }
 
-    //移動要求を送信
-    const EPathFollowingRequestResult::Type Result = MoveToLocation(projected.Location, FMath::Max(5.f, _acceptanceRadius), true, true, false, true);
+    //技の射程に合わせた到着位置へ進み、カプセル半径を二重に加えて射程外で停止しない。
+    const EPathFollowingRequestResult::Type Result = MoveToLocation(projected.Location, FMath::Max(5.f, _acceptanceRadius), false, true, false, true);
     return Result != EPathFollowingRequestResult::Failed;
 }
 

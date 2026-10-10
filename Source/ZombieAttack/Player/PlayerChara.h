@@ -184,6 +184,10 @@ private:
     //武器の切り替え中かどうかを返します。
     UFUNCTION(BlueprintCallable, Category = "Animation")
     bool IsSwitchingWeapon() const { return m_bIsSwitchingWeapon; }
+#if WITH_DEV_AUTOMATION_TESTS
+    //持ち替え完了処理の検証だけに非公開メンバーへのアクセスを許可し、ゲーム用APIには追加しない。
+    friend class FPlayerEquipmentTest;
+#endif
 
     //死亡状態かどうかを返します。
     UFUNCTION(BlueprintCallable, Category = "Animation")
@@ -590,8 +594,6 @@ private:
     FRotator m_defaultMeshRelativeRotation;
     //idleTimerAccumを秒単位で指定します。
     float m_idleTimerAccum = 0.f;
-    //lastWeaponWheel入力をゲーム処理から参照できるように管理します。
-    float m_lastWeaponWheelInput = 0.f;
     //weaponDisplayOrderをゲーム処理から参照できるように管理します。
     TArray<EWeaponSlot> m_weaponDisplayOrder;
 

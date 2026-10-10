@@ -12,8 +12,9 @@ constexpr float BloodDecalDepth = 8.0f;
 constexpr float BloodDecalSurfaceOffset = 1.5f;
 constexpr float BloodDropletSurfaceOffset = 3.0f;
 constexpr float BloodDropletConeDegrees = 38.0f;
-constexpr float BloodDropletMinScale = 0.030f;
-constexpr float BloodDropletMaxScale = 0.058f;
+//大粒の球に見えない細かな飛沫で命中点を伝える。
+constexpr float BloodDropletMinScale = 0.008f;
+constexpr float BloodDropletMaxScale = 0.018f;
 constexpr float BloodSpriteSurfaceOffset = 2.0f;
 constexpr float BloodSpriteStartScaleMultiplier = 0.72f;
 constexpr float BloodSpriteEndScaleMultiplier = 1.08f;
@@ -149,12 +150,14 @@ void UEnemyHitFeedbackComponent::SpawnBloodImpactSprite(const FHitResult& _hitRe
     spriteComponent->RegisterComponentWithWorld(world);
     spriteComponent->SetWorldLocation(_hitResult.ImpactPoint + facingDirection * BloodSpriteSurfaceOffset);
     spriteComponent->SetWorldRotation(FRotationMatrix::MakeFromZ(facingDirection).Rotator());
-    spriteComponent->SetWorldScale3D(FVector(m_impactSpriteScale));
+    const float size = FMath::Min(m_impactSpriteScale, 0.22f);
+    spriteComponent->SetWorldScale3D(FVector(size));
     FActiveBloodSprite& sprite = m_activeBloodSprites.AddDefaulted_GetRef();
     sprite.m_pComponent = spriteComponent;
-    sprite.m_initialScale = FVector(m_impactSpriteScale);
-    sprite.m_remainingLife = m_impactSpriteLifeSeconds;
-    sprite.m_totalLife = m_impactSpriteLifeSeconds;
+    sprite.m_initialScale = FVector(size);
+    //連射でも赤い板が重なり続けないよう、命中した瞬間だけ表示する。
+    sprite.m_remainingLife = FMath::Min(m_impactSpriteLifeSeconds, 0.16f);
+    sprite.m_totalLife = sprite.m_remainingLife;
 }
 
 //BloodDecalを作成します。

@@ -1,4 +1,5 @@
 #include "AmmoHUDWidget.h"
+#include "../Style/SurvivalUIStyle.h"
 
 #include "AmmoRadialWidget.h"
 #include "../../Weapon/GunWeapon.h"
@@ -22,6 +23,7 @@ void UAmmoHUDWidget::NativeOnInitialized()
         m_pRadialWidget = DesignerRadial;
         m_pClipText = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("ClipAmmoText")));
         m_pReserveText = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("ReserveAmmoText")));
+        SurvivalUI::Apply(WidgetTree);
         return;
     }
 
@@ -74,6 +76,7 @@ void UAmmoHUDWidget::NativeOnInitialized()
     UCanvasPanelSlot* reserveSlot = ammoNumberCanvas->AddChildToCanvas(m_pReserveText);
     reserveSlot->SetPosition(FVector2D(57.0f, 37.0f));
     reserveSlot->SetSize(FVector2D(48.0f, 25.0f));
+    SurvivalUI::Apply(WidgetTree);
 }
 
 //武器を設定します。

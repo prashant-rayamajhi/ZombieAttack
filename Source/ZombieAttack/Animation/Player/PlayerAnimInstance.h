@@ -17,4 +17,8 @@ public:
     //武器別BlendSpaceの横軸。後退は負、前進と横移動は正の速さで再生する。
     UPROPERTY(BlueprintReadOnly, Category = "Movement")
     float m_locomotionSpeed = 0.0f;
+
+    //持ち替え・リロード・照準の間だけ上半身スロットを合成し、脚は移動ポーズを使う。
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    float m_upperBodyWeight = 0.0f;
 };

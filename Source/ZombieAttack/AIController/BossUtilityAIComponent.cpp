@@ -185,7 +185,8 @@ float UBossUtilityAIComponent::ScoreAction(EBossTacticalAction _action, const FB
     const float nearRangeScore = 1.f - FMath::Clamp(_context.m_distanceToPlayer / (meleeRange * 1.35f), 0.f, 1.f);
     const float midRangeScore =
         1.f - FMath::Abs(FMath::Clamp((_context.m_distanceToPlayer - meleeRange) / FMath::Max(1.f, attackRange - meleeRange), 0.f, 1.f) - 0.5f) * 2.f;
-    const float farRangeScore = FMath::Clamp((_context.m_distanceToPlayer - meleeRange * 1.25f) / FMath::Max(1.f, attackRange - meleeRange), 0.f, 1.f);
+    const float farRangeScore =
+        FMath::Clamp((_context.m_distanceToPlayer - meleeRange * 1.25f) / FMath::Max(1.f, attackRange - meleeRange), 0.f, 1.f);
     const float lowBossHealth = 1.f - _context.m_bossHealthRatio;
     const float lowPlayerHealth = 1.f - _context.m_playerHealthRatio;
     const float vulnerable =

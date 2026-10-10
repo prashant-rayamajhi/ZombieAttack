@@ -1,4 +1,5 @@
 #include "EnemyHP.h"
+#include "../Style/SurvivalUIStyle.h"
 #include "../../Enemy/EnemyChara.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
@@ -13,6 +14,7 @@ void UEnemyHP::UpdateHealthUI()
     //体力を返します。
     const float CurrentHP = m_owner->GetHP();
     m_healthBar->SetPercent(MaxHP > 0.f ? CurrentHP / MaxHP : 0.f);
+    m_healthBar->SetFillColorAndOpacity(SurvivalUI::Accent);
     if (m_currentHealth)
     {
         m_currentHealth->SetText(FText::AsNumber(FMath::RoundToInt(CurrentHP)));

@@ -1,4 +1,5 @@
 #include "WeaponSlotEntryWidget.h"
+#include "../Style/SurvivalUIStyle.h"
 
 #include "Components/Border.h"
 #include "Components/Image.h"
@@ -36,14 +37,14 @@ void UWeaponSlotEntryWidget::Configure(EWeaponSlot _weaponSlot, const FText& _we
         m_pWeaponNameText = Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("WeaponNameText")));
     }
     const float targetOpacity = _bSelected ? _selectedOpacity : _inactiveOpacity;
-    const float targetScale = _bSelected ? _selectedScale : _inactiveScale;
 
     SetRenderOpacity(targetOpacity);
-    SetRenderScale(FVector2D(targetScale, targetScale));
+    //選択時も位置と大きさを動かさず、装備を見比べられるようにする。
+    SetRenderScale(FVector2D(1.0f));
     if (m_pWeaponNameText)
     {
         m_pWeaponNameText->SetText(_weaponName);
-        m_pWeaponNameText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+        m_pWeaponNameText->SetColorAndOpacity(FSlateColor(_bSelected ? SurvivalUI::Text : SurvivalUI::Muted));
     }
     if (m_pWeaponIcon)
     {
@@ -61,8 +62,8 @@ void UWeaponSlotEntryWidget::Configure(EWeaponSlot _weaponSlot, const FText& _we
     }
     if (m_pSelectionBorder)
     {
-        const FLinearColor selectedColor(0.55f, 0.05f, 0.06f, 0.95f);
-        const FLinearColor inactiveColor(0.02f, 0.02f, 0.02f, 0.35f);
+        const FLinearColor selectedColor(0.12f, 0.14f, 0.10f, 0.88f);
+        const FLinearColor inactiveColor(0.009f, 0.013f, 0.011f, 0.25f);
         m_pSelectionBorder->SetBrushColor(_bSelected ? selectedColor : inactiveColor);
     }
 }

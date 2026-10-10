@@ -70,7 +70,7 @@ int32 UEnemyLocatorWidget::NativePaint(const FPaintArgs& _args, const FGeometry&
             direction = yaw < 0 ? TEXT("<< LOOK LEFT") : TEXT("LOOK RIGHT >>");
         }
     }
-    const FLinearColor color = extraction ? FLinearColor(0.2f, 0.95f, 0.65f) : FLinearColor(1.0f, 0.32f, 0.22f);
+    const FLinearColor color = extraction ? FLinearColor(0.46f, 0.64f, 0.48f) : FLinearColor(0.72f, 0.29f, 0.18f);
     const FVector2D panel = point + FVector2D(18, -16);
     const FSlateBrush* brush = FCoreStyle::Get().GetBrush("WhiteBrush");
     FSlateDrawElement::MakeBox(_drawElements, layer + 1, _geometry.ToPaintGeometry(FVector2D(168, 62), FSlateLayoutTransform(panel)),

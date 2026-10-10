@@ -8,6 +8,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Engine/World.h"
+#include "Animation/AnimInstance.h"
 
 //通常攻撃の衝撃を足元の地面へ出す。ダメージは手足の接触判定に任せる。
 void ABossChara::ExecuteLightComboAreaAttack()
@@ -37,7 +38,8 @@ void ABossChara::ExecuteLightComboAreaAttack()
 //攻撃がヒットしたときの処理
 void ABossChara::OnEnemyAttackHit(AActor* _hitActor)
 {
-    if (!_hitActor) { return; }
+    //終了済みの攻撃から届いた通知では、衝撃や吹き飛ばしを追加しない。
+    if (!_hitActor || IsDead() || !m_bAttacking || m_bRecovering || m_bIsTransitioning) { return; }
 
     //命中した瞬間だけ、攻撃種類に合うインパクトを表示する
     //Slamは接地Notifyで生成済みのため、プレイヤー位置へ二重生成しません。
@@ -54,6 +56,25 @@ void ABossChara::OnEnemyAttackHit(AActor* _hitActor)
         UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, impactSystem, effectLocation, effectRotation, FVector(effectScale));
     }
     m_bComboHitConfirmed = true;
+
+    //接触判定側で一回に制限された命中だけを受け取り、連続して吹き飛ばさない。
+    if (m_currentPattern == EBossAttackPattern::ChargeRush && m_bAttacking && !m_bRecovering)
+    {
+        if (APlayerChara* player = Cast<APlayerChara>(_hitActor))
+        {
+            if (!player->IsDead())
+            {
+                FVector direction = (player->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+                if (direction.IsNearlyZero()) { direction = GetActorForwardVector(); }
+                player->LaunchCharacter(direction * m_rushPushSpeed + FVector(0.0f, 0.0f, m_rushLiftSpeed), true, true);
+            }
+            //硬直へ先に移して、通知を受けたBPから再度呼ばれても二重に発火させない。
+            FinishBossAttack();
+            //命中で前進を止めた後は、突進中の走る姿勢も短く混ぜて解除する。
+            if (UAnimInstance* animation = GetMesh()->GetAnimInstance()) { animation->Montage_Stop(0.15f); }
+            m_onRushHit.Broadcast(player);
+        }
+    }
 
     //ヒット時のサウンドを再生
     if (m_pImpactSound)

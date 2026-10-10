@@ -38,7 +38,7 @@ int32 UCombatCrosshairWidget::NativePaint(const FPaintArgs& _args, const FGeomet
     //撃破確認用の赤いクロスヘアを表示中かを示します。
     const bool bKillConfirmed = m_killFlashRemaining > 0.0f;
     const float crosshairGap = m_bAiming ? 5.0f : 9.0f;
-    const float armLength = bKillConfirmed ? 13.0f : (m_bAiming ? 9.0f : 11.0f);
+    const float armLength = 7.0f;
     const float thickness = bKillConfirmed ? 2.8f : 1.8f;
     //色を保持します。
     const FLinearColor color = bKillConfirmed ? FLinearColor(1.0f, 0.035f, 0.02f, 1.0f) : FLinearColor(0.78f, 0.88f, 0.82f, 0.92f);

@@ -1,4 +1,5 @@
 #include "EnemyCount.h"
+#include "../Style/SurvivalUIStyle.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
@@ -58,6 +59,7 @@ void UEnemyCount::NativeOnInitialized()
         //未設定または旧形式のBlueprintでは、必要要素を備えたC++製HUDへ切り替えます。
         BuildMissionHUD();
     }
+    SurvivalUI::Apply(WidgetTree);
 }
 
 //ミッションHUDを作成します。
@@ -206,7 +208,7 @@ void UEnemyCount::NativeTick(const FGeometry& _geometry, float _deltaTime)
         m_counterPulseRemaining = FMath::Max(0.0f, m_counterPulseRemaining - _deltaTime);
         //透明度を保持します。
         const float Alpha = m_counterPulseRemaining / 0.35f;
-        const float Scale = 1.0f + FMath::Sin(Alpha * PI) * 0.16f;
+        const float Scale = 1.0f + FMath::Sin(Alpha * PI) * 0.035f;
         m_enemyCountText->SetRenderScale(FVector2D(Scale, Scale));
         if (m_counterPulseRemaining <= 0.0f)
         {
@@ -221,7 +223,7 @@ void UEnemyCount::NativeTick(const FGeometry& _geometry, float _deltaTime)
         const float FadeOut = FMath::Clamp(m_missionTimeRemaining / 0.6f, 0.0f, 1.0f);
         const float Opacity = FMath::Min(FadeIn, FadeOut);
         m_missionPanel->SetRenderOpacity(Opacity);
-        m_missionPanel->SetRenderScale(FVector2D(FMath::Lerp(0.92f, 1.0f, FadeIn)));
+        m_missionPanel->SetRenderScale(FVector2D(1.0f));
         if (m_missionTimeRemaining <= 0.0f)
         {
             m_missionPanel->SetVisibility(ESlateVisibility::Collapsed);

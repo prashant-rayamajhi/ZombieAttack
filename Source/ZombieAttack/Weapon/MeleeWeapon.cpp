@@ -6,6 +6,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Components/SkeletalMeshComponent.h"
 
 //AMeleeWeaponが使用するComponentと初期パラメータを設定します。
 AMeleeWeapon::AMeleeWeapon()
@@ -21,6 +24,8 @@ AMeleeWeapon::AMeleeWeapon()
 //Weaponを使用します。
 void AMeleeWeapon::UseWeapon()
 {
+    //次段への待ち時間中は新しい一段目を始めず、予約済みの一撃だけを再生する。
+    if (GetWorldTimerManager().IsTimerActive(m_cooldownTimer)) { return; }
     if (m_bIsAttacking)
     {
         //攻撃中に入力された場合、次段へつなげる予約だけします。
@@ -34,9 +39,19 @@ void AMeleeWeapon::UseWeapon()
 //現在のComboMontageを再生します。
 void AMeleeWeapon::PlayCurrentComboMontage()
 {
+    //装備変更や死亡で取り消したコンボのタイマーを、別の行動へ持ち越さない。
+    GetWorldTimerManager().ClearTimer(m_cooldownTimer);
     //所有者キャラクターを保持します。
     ACharacter* ownerCharacter = Cast<ACharacter>(m_pOwnerChara);
     if (!ownerCharacter) { return; }
+    if (const APlayerChara* player = Cast<APlayerChara>(ownerCharacter))
+    {
+        if (player->IsDead() || player->GetCurrentWeapon() != this)
+        {
+            ResetCombo();
+            return;
+        }
+    }
 
     m_bIsAttacking = true;
     m_bHitExecutedThisSwing = false;
@@ -76,14 +91,28 @@ void AMeleeWeapon::PlayCurrentComboMontage()
         TryContinueComboFromNotify();
     }
 
+    //長い斬撃を固定の0.8秒で解除せず、実際の再生終了まで次段入力と命中通知を受け付ける。
+    float resetDelay = FMath::Max(0.01f, m_comboWindowDuration);
+    UAnimInstance* instance = ownerCharacter->GetMesh() ? ownerCharacter->GetMesh()->GetAnimInstance() : nullptr;
+    UAnimMontage* montage = instance ? instance->GetCurrentActiveMontage() : nullptr;
+    if (bPlayedMontage && montage)
+    {
+        const float rate = FMath::Abs(instance->Montage_GetPlayRate(montage) * montage->RateScale);
+        resetDelay = FMath::Max(resetDelay, montage->GetPlayLength() / FMath::Max(0.01f, rate) + 0.05f);
+    }
     GetWorldTimerManager().ClearTimer(m_comboResetTimer);
-    GetWorldTimerManager().SetTimer(m_comboResetTimer, this, &AMeleeWeapon::ResetCombo, m_comboWindowDuration, false);
+    GetWorldTimerManager().SetTimer(m_comboResetTimer, this, &AMeleeWeapon::ResetCombo, resetDelay, false);
 }
 
 //Hitを実行します。
 void AMeleeWeapon::ExecuteHit()
 {
-    if (m_bHitExecutedThisSwing) { return; }
+    //中断した攻撃の通知が遅れて届いても、待機中や装備変更後には命中させない。
+    if (!m_bIsAttacking || m_bHitExecutedThisSwing) { return; }
+    if (const APlayerChara* player = Cast<APlayerChara>(m_pOwnerChara))
+    {
+        if (player->IsDead() || player->GetCurrentWeapon() != this) { return; }
+    }
 
     m_bHitExecutedThisSwing = true;
     //VFXは空振りでは出さず、PerformSweepで命中が確定した時だけ再生します。
@@ -93,6 +122,8 @@ void AMeleeWeapon::ExecuteHit()
 //攻撃MontageのNotifyを受け、入力済みの次段攻撃へ繋げます。
 void AMeleeWeapon::TryContinueComboFromNotify()
 {
+    //同じ分岐通知が重複しても、次段の予約を作り直さない。
+    if (!m_bIsAttacking) { return; }
     m_bIsAttacking = false;
     if (!m_bComboQueued) { return; }
 
@@ -115,7 +146,9 @@ void AMeleeWeapon::TryContinueComboFromNotify()
 
     m_currentComboIndex = nextComboIndex;
 
-    GetWorldTimerManager().SetTimer(m_cooldownTimer, this, &AMeleeWeapon::PlayCurrentComboMontage, m_attackCoolDown, false);
+    //前段のリセットが次段の開始前に発火すると、予約された攻撃が一段目へ巻き戻るため解除する。
+    GetWorldTimerManager().ClearTimer(m_comboResetTimer);
+    GetWorldTimerManager().SetTimer(m_cooldownTimer, this, &AMeleeWeapon::PlayCurrentComboMontage, FMath::Max(0.01f, m_attackCoolDown), false);
 }
 
 //Sweepを判定範囲へ実行します。
@@ -137,7 +170,8 @@ void AMeleeWeapon::PerformSweep()
 
     //ワールドを返します。
     const bool bHit =
-        GetWorld()->SweepSingleByChannel(hitResult, traceStart, traceEnd, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(m_attackRadius), params);
+        GetWorld()->SweepSingleByChannel(
+            hitResult, traceStart, traceEnd, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(m_attackRadius), params);
     if (bHit && hitResult.GetActor())
     {
         if (m_pHitVFX)

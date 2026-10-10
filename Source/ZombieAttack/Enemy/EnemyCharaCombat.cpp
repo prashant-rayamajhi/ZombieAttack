@@ -69,6 +69,18 @@ void AEnemyChara::BeginAttack()
     //攻撃中、死亡中、またはプレイヤーキャラクターが存在しない場合は処理を終了する
     if (m_bIsDead || m_bIsAttacking || !m_pPlayerChara) { return; }
 
+    //同じ技を続けて再生しても、前回の終了通知が新しい攻撃を終了させない。
+    if (UAnimInstance* previous = GetMesh()->GetAnimInstance())
+    {
+        if (m_activeAttack)
+        {
+            FOnMontageEnded ended;
+            FOnMontageBlendingOutStarted blending;
+            previous->Montage_SetEndDelegate(ended, m_activeAttack);
+            previous->Montage_SetBlendingOutDelegate(blending, m_activeAttack);
+        }
+    }
+
     //攻撃中フラグを設定し、ヒットが適用されたかどうかのフラグをリセットする
     m_bIsAttacking = true;
     m_bHitAppliedThisAttack = false;
@@ -121,6 +133,13 @@ void AEnemyChara::BeginAttack()
     FOnMontageEnded endDelegate;
     endDelegate.BindUObject(this, &AEnemyChara::HandleAttackMontageEnded);
     GetMesh()->GetAnimInstance()->Montage_SetEndDelegate(endDelegate, m_activeAttack);
+    //攻撃を中断した後の補間中にも手が動くため、中断開始で判定を閉じる。
+    FOnMontageBlendingOutStarted blendDelegate;
+    blendDelegate.BindWeakLambda(this, [this](UAnimMontage* _montage, bool _interrupted)
+    {
+        if (_interrupted && _montage == m_activeAttack) { EndAttack(); }
+    });
+    instance->Montage_SetBlendingOutDelegate(blendDelegate, m_activeAttack);
     GetWorldTimerManager().SetTimer(m_attackEndTimer, this, &AEnemyChara::EndAttack, MontageDuration + 0.1f, false);
 }
 

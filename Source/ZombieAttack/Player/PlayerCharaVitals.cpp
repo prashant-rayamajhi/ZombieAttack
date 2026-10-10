@@ -15,6 +15,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 
 //受けたダメージを体力へ反映します。
 float APlayerChara::TakeDamage(float _damageAmount, FDamageEvent const& _damageEvent, AController* _eventInstigator, AActor* _damageCauser)
@@ -127,6 +129,8 @@ void APlayerChara::BeginDeathSequence()
     m_bRifleCombatAim = false;
     m_bPendingRifleShot = false;
     StopRifleAimPose(0.0f);
+    //死亡モーションを遅延したナイフ攻撃で上書きしないよう、次段の予約を破棄する。
+    if (m_pKnifeWeapon) { m_pKnifeWeapon->ResetCombo(); }
     m_bIsHealing = false;
     if (AGunWeapon* gunWeapon = Cast<AGunWeapon>(m_pCurrentWeapon))
     {
@@ -163,7 +167,15 @@ void APlayerChara::BeginDeathSequence()
     if (m_pDeathMontage)
     {
         StopAnimMontage();
-        MontageDuration = PlayAnimMontage(m_pDeathMontage);
+        if (UAnimInstance* instance = GetMesh()->GetAnimInstance())
+        {
+            MontageDuration = instance->Montage_Play(m_pDeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+            //死亡時だけ最終姿勢を残し、画面遷移前に下の待機姿勢へ混ざるのを防ぐ。
+            if (FAnimMontageInstance* death = instance->GetActiveInstanceForMontage(m_pDeathMontage))
+            {
+                death->bEnableAutoBlendOut = false;
+            }
+        }
     }
     if (MontageDuration > 0.0f)
     {
@@ -203,6 +215,8 @@ void APlayerChara::FinishDeathSequence()
 
 bool APlayerChara::PickUpItem(float _value, EItemType _type)
 {
+    //死亡直後に残った接触通知でアイテムを消したり、新しい武器を生成したりしない。
+    if (m_bIsDead) { return false; }
     switch (_type)
     {
     case EItemType::EIT_Health: ++m_healItemCount; return true;
@@ -287,6 +301,8 @@ void APlayerChara::ApplyHeal(float _amount)
 
 void APlayerChara::UseHealItem()
 {
+    //導入演出で操作を止めている間に回復アイテムだけ消費されることを防ぐ。
+    if (!m_bCanControl) { return; }
     if (m_healItemCount <= 0 || m_bIsHealing || m_bIsDead || m_bIsReloadingAnim || m_bIsSwitchingWeapon || m_hp >= m_maxHp) { return; }
 
     ResetIdleTimer();

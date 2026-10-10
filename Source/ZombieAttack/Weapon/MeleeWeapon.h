@@ -33,6 +33,9 @@ class ZOMBIEATTACK_API AMeleeWeapon : public AWeaponBase
     //コンボを強制終了します。
     void ResetCombo();
 
+    //通知による命中を受け付ける斬撃の再生中かを返す。
+    bool IsAttacking() const { return m_bIsAttacking; }
+
   protected:
     //攻撃範囲を保持します。
     UPROPERTY(EditAnywhere, Category = "Combat")

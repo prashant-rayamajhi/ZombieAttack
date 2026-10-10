@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "ZombieAttack/Character/BaseCharacter.h"
+#include "ZombieAttack/Player/PlayerChara.h"
 #include "ZombieAttack/Goal/GoalActor.h"
 #include "ZombieAttack/UI/EnemyUI/EnemyCount.h"
 #include "ZombieAttack/UI/Configuration/ZombieAttackUISettings.h"
@@ -120,7 +121,7 @@ void ASpawnEnemies::ReleasePreparedEnemies()
     m_bEnemiesReleased = true;
     SetAllSpawnedEnemyGameplayEnabled(true);
     UpdateEnemyCountWidget();
-    if (g_enemyCountWidget.IsValid())
+    if (g_enemyCountWidget.IsValid() && g_enemyCountWidget->GetWorld() == GetWorld())
     {
         g_enemyCountWidget->ShowMissionObjective(GetMissionRemainingEnemyCount());
     }
@@ -130,7 +131,7 @@ void ASpawnEnemies::ReleasePreparedEnemies()
 //ウィジェットを確実に生成する関数
 void ASpawnEnemies::EnsureEnemyCountWidget()
 {
-    if (g_enemyCountWidget.IsValid())
+    if (g_enemyCountWidget.IsValid() && g_enemyCountWidget->GetWorld() == GetWorld())
     {
         m_pEnemyCountWidget = g_enemyCountWidget.Get();
         return;
@@ -160,7 +161,7 @@ void ASpawnEnemies::EnsureEnemyCountWidget()
 //敵の残り数をウィジェットに反映する関数
 void ASpawnEnemies::NotifyGoalActivated(UWorld* _pWorld)
 {
-    if (_pWorld && g_enemyCountWidget.IsValid())
+    if (_pWorld && g_enemyCountWidget.IsValid() && g_enemyCountWidget->GetWorld() == _pWorld)
     {
         g_enemyCountWidget->ShowGoalReady();
     }
@@ -170,7 +171,7 @@ void ASpawnEnemies::NotifyGoalActivated(UWorld* _pWorld)
 void ASpawnEnemies::UpdateEnemyCountWidget()
 {
     //ウィジェットがまだ生成されていない場合は、グローバル変数から取得する
-    if (g_enemyCountWidget.IsValid())
+    if (g_enemyCountWidget.IsValid() && g_enemyCountWidget->GetWorld() == GetWorld())
     {
         m_pEnemyCountWidget = g_enemyCountWidget.Get();
     }
@@ -342,7 +343,8 @@ void ASpawnEnemies::EndWave()
     const bool bHasNextWave = (nextIndex < m_waves.Num()) && (nextIndex < m_maxWaveIndex);
     if (bHasNextWave)
     {
-        const float delay = FMath::Max(0.0f, m_waves[m_currentWaveIndex].m_spawnInterval);
+        //ゼロ秒はTimerの取消扱いになるため、即時出現の設定でも次の更新で進める。
+        const float delay = FMath::Max(0.01f, m_waves[m_currentWaveIndex].m_spawnInterval);
         GetWorld()->GetTimerManager().SetTimer(m_waveTimerHandle, this, &ASpawnEnemies::StartNextWave, delay, false);
         return;
     }
@@ -629,12 +631,15 @@ void ASpawnEnemies::SetAllSpawnedEnemyGameplayEnabled(bool _bEnabled)
 //敵が破壊されたときに呼ばれる関数
 void ASpawnEnemies::OnEnemyDeath(AActor* _destroyedActor)
 {
+    //敗北時の一括削除を撃破として数えず、削除中の配列変更と誤ったクリア判定を防ぐ。
+    if (m_bIsGameOver) { return; }
     //破壊されたアクターが敵キャラクターであるかを確認する
     AEnemyChara* deadEnemy = Cast<AEnemyChara>(_destroyedActor);
     if (!deadEnemy) { return; }
 
     //破壊された敵をスポーン済みリストから削除し、残りの敵数を更新する
-    m_spawnedEnemies.Remove(deadEnemy);
+    //同じ破棄通知や、このSpawnerが生成していない敵では残り数を減らさない。
+    if (m_spawnedEnemies.Remove(deadEnemy) == 0) { return; }
     m_remainingEnemies = FMath::Max(0, m_remainingEnemies - 1);
     UpdateEnemyCountWidget();
 
@@ -672,6 +677,8 @@ void ASpawnEnemies::OnEnemyDeath(AActor* _destroyedActor)
 //全Waveを一度に生成するモードで、すべての敵が倒された後にゴールをアクティブ化する関数
 void ASpawnEnemies::TryActivateGoalAfterAllEnemiesDefeated()
 {
+    //敗北が決まった後に別の敵の破棄通知が来ても、ゴールを開かない。
+    if (m_bIsGameOver) { return; }
     //ワールドを返します。
     UWorld* world = GetWorld();
     if (!world) { return; }
@@ -702,6 +709,8 @@ void ASpawnEnemies::TryActivateGoalAfterAllEnemiesDefeated()
 //ゲームクリア時に呼ばれる関数
 void ASpawnEnemies::HandleGameClear()
 {
+    //クリアとゲームオーバーの両方から遷移要求が出るのを防ぐ。
+    if (m_bIsGameOver) { return; }
     //ゲームクリア時の処理を行う
     m_bIsGameOver = true;
     GetWorld()->GetTimerManager().ClearTimer(m_waveTimerHandle);
@@ -719,6 +728,8 @@ void ASpawnEnemies::HandleGameClear()
 //ゲームオーバー時に呼ばれる関数
 void ASpawnEnemies::HandleGameOver(ABaseCharacter* _deadCharacter)
 {
+    //死亡通知が重複しても、削除中の敵配列へ再入しない。
+    if (m_bIsGameOver) { return; }
     //ゲームオーバー時の処理を行う
     m_bIsGameOver = true;
     GetWorld()->GetTimerManager().ClearTimer(m_waveTimerHandle);
@@ -737,9 +748,12 @@ void ASpawnEnemies::HandleGameOver(ABaseCharacter* _deadCharacter)
     m_remainingEnemies = 0;
     UpdateEnemyCountWidget();
 
-    //3秒後にゲームオーバー画面に遷移する
+    //操作キャラクターは死亡アニメの完了後に自分で遷移するため、固定三秒で演出を切らない。
+    if (Cast<APlayerChara>(_deadCharacter)) { return; }
+
+    //独自のBaseCharacterを使う派生ゲームだけ、三秒後の代替遷移を予約する。
     GetWorld()->GetTimerManager().SetTimer(m_gameOverTimerHandle,
-                                           FTimerDelegate::CreateLambda(
+                                           FTimerDelegate::CreateWeakLambda(this,
                                                [this]()
                                                {
                                                    if (GetWorld())

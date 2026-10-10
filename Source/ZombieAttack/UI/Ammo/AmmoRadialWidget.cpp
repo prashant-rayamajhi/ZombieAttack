@@ -1,4 +1,5 @@
 #include "AmmoRadialWidget.h"
+#include "../Style/SurvivalUIStyle.h"
 
 #include "Rendering/DrawElements.h"
 #include "Widgets/SLeafWidget.h"
@@ -50,11 +51,13 @@ class SAmmoRadial : public SLeafWidget
                  float _percent, const FLinearColor& _color, ESlateDrawEffect _drawEffects) const
     {
         constexpr int32 SegmentCount = 64;
+        //残弾0で短い弧が残ると一発あるように見えるため、空のゲージは描かない。
+        if (_percent <= 0.0f) { return; }
         const int32 activeSegments = FMath::Max(1, FMath::CeilToInt(SegmentCount * FMath::Clamp(_percent, 0.0f, 1.0f)));
         TArray<FVector2D> points;
         points.Reserve(activeSegments + 1);
 
-        //「int32 index = 0; index <= activeSegments; ++index」で列挙される各要素へ、ループ本体の判定と更新を適用します。
+        //残量に対応する角度まで円弧をつなぎ、空の部分は下地だけを残す。
         for (int32 index = 0; index <= activeSegments; ++index)
         {
             const float normalized = static_cast<float>(index) / static_cast<float>(SegmentCount);
@@ -110,6 +113,6 @@ void UAmmoRadialWidget::SynchronizeProperties()
     Super::SynchronizeProperties();
     if (m_pSlateWidget.IsValid())
     {
-        m_pSlateWidget->SetValues(m_clipPercent, m_reservePercent, m_clipColor, m_reserveColor, m_emptyColor, m_ringThickness);
+        m_pSlateWidget->SetValues(m_clipPercent, m_reservePercent, SurvivalUI::Text, SurvivalUI::Accent, m_emptyColor, 3.0f);
     }
 }

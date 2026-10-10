@@ -5,6 +5,9 @@
 #include "ZombieAttack/AIController/BossAITypes.h"
 #include "BossChara.generated.h"
 
+//突進がプレイヤーへ命中した瞬間を、効果音や追加演出へ一度だけ伝える。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FBossRushHit, AActor*, _player);
+
 //前方宣言
 class USoundBase;
 //UAnimMontageは、ポインターまたは参照の型解決に必要な宣言だけを先行して用意します。
@@ -35,9 +38,28 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     //エンジンが使う定型コード
     GENERATED_BODY()
 
+#if WITH_DEV_AUTOMATION_TESTS
+    //動作途中の通知と中断を再現し、硬直へ移る時刻を検証する。
+    friend class FBossAnimationSyncTest;
+    //突進の命中時に硬直へ移ることと、二重命中を防ぐ状態を検証する。
+    friend class FRushContactTest;
+#endif
+
   public:
     //コンストラクタ
     ABossChara();
+
+    //突進の接触が成立した時だけ通知し、接近しただけでは発火しない。
+    UPROPERTY(BlueprintAssignable, Category = "Boss|Charge")
+    FBossRushHit m_onRushHit;
+
+    //命中時にプレイヤーを後方へ押し出す水平速度。
+    UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge", meta = (ClampMin = "0.0"))
+    float m_rushPushSpeed = 360.0f;
+
+    //短い放物線で着地できるよう、突進の打ち上げを控えめにする。
+    UPROPERTY(EditDefaultsOnly, Category = "Boss|Charge", meta = (ClampMin = "0.0"))
+    float m_rushLiftSpeed = 160.0f;
 
     //毎フレーム呼ばれる関数
     virtual void Tick(float _deltaTime) override;
@@ -214,6 +236,17 @@ class ZOMBIEATTACK_API ABossChara : public AEnemyChara
     TObjectPtr<UNiagaraSystem> m_pPhaseTransitionVFX;
 
   private:
+    //攻撃モンタージュの終了通知を登録し、再生速度を含めた所要時間を返す。
+    float PlayBossMontage(UAnimMontage* _montage);
+    //現在の攻撃だけに終了通知を接続し、前段の通知が次段を止めるのを防ぐ。
+    void TrackBossMontage(UAnimMontage* _montage);
+    //攻撃の自然終了と中断の両方で、接触判定と移動を止めて硬直へ移る。
+    void OnBossMontageEnded(UAnimMontage* _montage, bool _interrupted);
+    //別の動作へ中断された瞬間に接触判定を閉じ、残る補間中の命中を防ぐ。
+    void OnBossMontageBlendingOut(UAnimMontage* _montage, bool _interrupted);
+    //終了通知の対象を特定し、動的に作った突進モンタージュも再生中は保持する。
+    UPROPERTY(Transient)
+    TObjectPtr<UAnimMontage> m_actionMontage;
     //攻撃、コンボ、フェーズ移行に関係する予約をまとめて取り消す
     void ClearCombatTimers();
     //終了通知の重複で硬直時間が延びるのを防ぐ

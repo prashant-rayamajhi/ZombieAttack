@@ -561,11 +561,23 @@ void AEnemyAIController::UpdateTacticalChase()
         }
     }
     desiredLocation += separation.GetClampedToMaxSize(180.0f);
+    //攻撃担当は最後の数歩を相手まで詰める。外周配置の到達判定で射程外に停止しない。
+    if (attackOpening && distance < desiredRange * 1.75f && !enemy->IsA<ABossChara>())
+    {
+        if (enemy->CanHitPlayer(enemy->GetContactAttackRange(), -1.0f))
+        {
+            StopMovement();
+            enemy->GetCharacterMovement()->StopMovementImmediately();
+            return;
+        }
+        desiredLocation = targetLocation;
+        acceptanceRadius = 5.0f;
+    }
     //壁の外へ投影できない時は、その場で次の判断を待つ。
     FVector projectedLocation;
     if (ProjectToNavigation(desiredLocation, projectedLocation))
     {
-        MoveToLocation(projectedLocation, acceptanceRadius, true, true, false, true);
+        MoveToLocation(projectedLocation, acceptanceRadius, false, true, false, true);
     }
     else
     {

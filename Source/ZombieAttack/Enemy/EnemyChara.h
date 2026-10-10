@@ -60,6 +60,9 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     UAnimSequence* GetIdleAnimation() const { return m_idleAnimation; }
     UAnimSequence* GetWalkAnimation() const { return m_walkAnimation; }
     UAnimSequence* GetRunAnimation() const { return m_runAnimation; }
+    //左右の回り込みで、前進走行を横滑りさせず専用の足運びを返す。
+    UAnimSequence* GetStrafeLeftAnimation() const { return m_strafeLeft; }
+    UAnimSequence* GetStrafeRightAnimation() const { return m_strafeRight; }
     //初回発見時の咆哮を再生し、移動を止める秒数を返す
     float PlayAlertAnimation();
     //壁、高低差、背後への空振りを除外して近接攻撃の届く範囲を判定する
@@ -190,6 +193,12 @@ class ZOMBIEATTACK_API AEnemyChara : public ABaseCharacter
     //毎秒500cmを基準とする走行姿勢
     UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
     TObjectPtr<UAnimSequence> m_runAnimation;
+    //この敵の骨格に合わせた左移動クリップ。
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
+    TObjectPtr<UAnimSequence> m_strafeLeft;
+    //この敵の骨格に合わせた右移動クリップ。
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
+    TObjectPtr<UAnimSequence> m_strafeRight;
     //プレイヤーを初めて見つけた時に一度だけ再生する姿勢
     UPROPERTY(EditDefaultsOnly, Category = "Animation|Locomotion")
     TObjectPtr<UAnimSequence> m_alertAnimation;

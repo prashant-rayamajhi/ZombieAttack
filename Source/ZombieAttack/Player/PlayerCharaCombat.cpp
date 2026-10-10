@@ -134,46 +134,42 @@ void APlayerChara::RefreshWeaponCarousel()
 //NextWeaponを順番に切り替えます。
 void APlayerChara::CycleNextWeapon()
 {
-    if (m_weaponDisplayOrder.Num() <= 1) { return; }
-
-    //一番上の武器を選択し、選択された武器を一番下へ移動します。
-    SwitchWeaponToSlot(m_weaponDisplayOrder[0]);
+    //表示リストの並べ替えとは切り離し、Pistol、AR、Knifeの順で所持武器を探す。
+    const EWeaponSlot slots[] = {EWeaponSlot::Pistol, EWeaponSlot::AR, EWeaponSlot::Knife};
+    const int32 current = m_currentSlot == EWeaponSlot::Pistol ? 0 : (m_currentSlot == EWeaponSlot::AR ? 1 : 2);
+    for (int32 step = 1; step < 3; ++step)
+    {
+        const EWeaponSlot next = slots[(current + step) % 3];
+        if (IsWeaponAvailable(next)) { SwitchWeaponToSlot(next); return; }
+    }
 }
 
 //PreviousWeaponを順番に切り替えます。
 void APlayerChara::CyclePreviousWeapon()
 {
-    if (m_weaponDisplayOrder.Num() <= 1) { return; }
-
-    //現在武器のすぐ上にある武器を選択します。
-    SwitchWeaponToSlot(m_weaponDisplayOrder[m_weaponDisplayOrder.Num() - 2]);
+    //逆方向でも三種類を一周できるよう、選択履歴ではなく固定の装備順を逆にたどる。
+    const EWeaponSlot slots[] = {EWeaponSlot::Pistol, EWeaponSlot::AR, EWeaponSlot::Knife};
+    const int32 current = m_currentSlot == EWeaponSlot::Pistol ? 0 : (m_currentSlot == EWeaponSlot::AR ? 1 : 2);
+    for (int32 step = 1; step < 3; ++step)
+    {
+        const EWeaponSlot next = slots[(current - step + 3) % 3];
+        if (IsWeaponAvailable(next)) { SwitchWeaponToSlot(next); return; }
+    }
 }
 
 //WeaponWheelが発生したときの処理を行います。
 void APlayerChara::OnWeaponWheel(float _wheelValue)
 {
-    //現在のフレームで武器切替入力が押されているかを示します。
-    const bool bPressedNow = FMath::Abs(_wheelValue) > 0.1f;
-    //前のフレームでも武器切替入力が押されていたかを示します。
-    const bool bWasPressed = FMath::Abs(m_lastWeaponWheelInput) > 0.1f;
-    if (bPressedNow && !bWasPressed)
-    {
-        //UnrealのMouse Wheel Axisは、通常は下スクロールでマイナス値になります。
-        if (_wheelValue < 0.f)
-        {
-            CycleNextWeapon();
-        }
-        else
-        {
-            CyclePreviousWeapon();
-        }
-    }
-    m_lastWeaponWheelInput = _wheelValue;
+    //ホイール軸は押しっぱなしではなく回転量。隣り合うフレームの同方向入力も一回ずつ受け付ける。
+    if (_wheelValue < -0.1f) { CycleNextWeapon(); }
+    else if (_wheelValue > 0.1f) { CyclePreviousWeapon(); }
 }
 
 //指定されたスロットの武器を装備し、MeshとHUDを更新します。
 bool APlayerChara::SwitchWeaponToSlot(EWeaponSlot _slot)
 {
+    //導入カットシーン中の装備入力で、復帰後の姿勢やHUDを先に切り替えない。
+    if (!m_bCanControl) { return false; }
     if (m_currentSlot == _slot || !IsWeaponAvailable(_slot) || m_bIsHealing || m_bIsDead || m_bIsReloadingAnim || m_bIsSwitchingWeapon)
     {
         //呼び出し元へ失敗を返し、この関数でこれ以上の処理を行わないようにします。
@@ -191,18 +187,17 @@ bool APlayerChara::SwitchWeaponToSlot(EWeaponSlot _slot)
     AWeaponBase* nextWeapon = GetWeaponForSlot(_slot);
     if (!nextWeapon) { return false; }
 
-    //速度を返します。
-    const bool bIsMoving = GetVelocity().SizeSquared2D() > FMath::Square(10.0f) || !m_charaMovement.IsNearlyZero(0.05f);
-
     ResetIdleTimer();
     if (m_pCurrentWeapon)
     {
+        //ナイフの次段予約を消し、銃へ持ち替えた後に斬撃が再開しないようにする。
+        if (AMeleeWeapon* melee = Cast<AMeleeWeapon>(m_pCurrentWeapon)) { melee->ResetCombo(); }
         m_pCurrentWeapon->SetActorHiddenInGame(true);
     }
 
     m_currentSlot = _slot;
-    //移動中は全身武器切替状態へ入れず、脚のLocomotionを継続します。
-    m_bIsSwitchingWeapon = !bIsMoving;
+    //脚の歩行は続け、持ち替え完了までは次の装備入力と攻撃だけを待たせる。
+    m_bIsSwitchingWeapon = true;
     m_bIsFiringRifle = false;
     m_bRifleCombatAim = false;
     m_bPendingRifleShot = false;
@@ -217,24 +212,12 @@ bool APlayerChara::SwitchWeaponToSlot(EWeaponSlot _slot)
     MoveWeaponSlotToBottom(_slot);
     RefreshWeaponCarousel();
     float switchDuration = 0.4f;
-    if (switchMontage && !bIsMoving)
+    if (switchMontage)
     {
         switchDuration = FMath::Max(PlayAnimMontage(switchMontage), 0.3f);
     }
-    else if (bIsMoving)
-    {
-        //全身Montageを歩行中に重ねると足が止まって滑って見えるため、
-        //移動中はLocomotionを維持し、武器の表示切替だけを短時間で完了します。
-        switchDuration = 0.22f;
-    }
-    if (m_bIsSwitchingWeapon)
-    {
-        GetWorldTimerManager().SetTimer(m_switchWeaponTimer, this, &APlayerChara::OnSwitchWeaponFinished, switchDuration, false);
-    }
-    else
-    {
-        GetWorldTimerManager().ClearTimer(m_switchWeaponTimer);
-    }
+    //立ち止まっている場合も移動中も、同じ再生時間だけ次の持ち替えを待たせる。
+    GetWorldTimerManager().SetTimer(m_switchWeaponTimer, this, &APlayerChara::OnSwitchWeaponFinished, switchDuration, false);
     if (m_pReloadUI)
     {
         m_pReloadUI->SetWeapon(Cast<AGunWeapon>(m_pCurrentWeapon));
@@ -263,6 +246,8 @@ bool APlayerChara::PlayKnifeAttackMontage(int32 _comboIndex)
 //リロード武器を処理します。
 void APlayerChara::ReloadWeapon()
 {
+    //カットシーン中は射撃だけでなくリロードも止め、操作復帰時に動作を持ち越さない。
+    if (!m_bCanControl) { return; }
     if (m_currentSlot == EWeaponSlot::Knife || m_bIsReloadingAnim || m_bIsDead || m_bIsHealing || m_bIsSwitchingWeapon) { return; }
 
     //銃武器を保持します。
@@ -409,12 +394,8 @@ void APlayerChara::FinishRifleAttack()
     m_bIsFiringRifle = false;
     m_bRifleCombatAim = false;
 
-    //射撃専用の中央向き補正を残さず、通常のIdle・移動姿勢へ戻します。
-    if (USkeletalMeshComponent* playerMesh = GetMesh())
-    {
-        playerMesh->SetRelativeRotation(m_defaultMeshRelativeRotation);
-    }
-
+    //照準ボタンを押している間は構えを保つ。離した場合も最後に狙った向きを残し、Actor初期角度へ跳ね戻さない。
+    if (m_bIsAiming) { return; }
     StopRifleAimPose(0.12f);
     SwapCrosshairWidget();
 }
@@ -594,6 +575,8 @@ void APlayerChara::AttachWeapon(TSubclassOf<AActor> _weaponClass)
 
 void APlayerChara::StartAim()
 {
+    //カメラを演出が管理している間は、照準による画角変更を開始しない。
+    if (!m_bCanControl) { return; }
     if (m_bIsAiming || m_bIsDead || m_bIsHealing || m_bIsReloadingAnim || m_bIsSwitchingWeapon) { return; }
     ResetIdleTimer();
     m_bIsAiming = true;

@@ -26,13 +26,15 @@ void UWeaponCarouselWidget::NativeConstruct()
         }
         if (UCanvasPanelSlot* canvasSlot = Cast<UCanvasPanelSlot>(layoutRoot->Slot))
         {
-            canvasSlot->SetAnchors(FAnchors(0.0f, 0.0f));
-            canvasSlot->SetAlignment(FVector2D::ZeroVector);
-            canvasSlot->SetPosition(FVector2D(0.0f, 158.0f));
+            canvasSlot->SetAnchors(FAnchors(0.0f, 1.0f));
+            canvasSlot->SetAlignment(FVector2D(0.0f, 1.0f));
+            canvasSlot->SetAutoSize(true);
+            //画面上の配置はPlayerChara側で決め、内側でも同じ余白を加算しない。
+            canvasSlot->SetPosition(FVector2D::ZeroVector);
         }
         else
         {
-            m_pWeaponListBox->SetRenderTranslation(FVector2D(-92.0f, 150.0f));
+            m_pWeaponListBox->SetRenderTranslation(FVector2D::ZeroVector);
         }
     }
 }

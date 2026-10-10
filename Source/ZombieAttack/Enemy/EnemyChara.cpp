@@ -500,29 +500,32 @@ void AEnemyChara::DropItem()
 {
     //ドロップ抽選に外れた場合、または生成先Worldがない場合はアイテムを生成しません。
     if (FMath::FRand() > m_regularDropProbability || !GetWorld()) { return; }
-        TSubclassOf<APickUpBase> pickupClass = m_pPickUpClass;
-        if (!pickupClass)
-        {
-            pickupClass = LoadClass<APickUpBase>(nullptr, TEXT("/Game/Blueprints/Weapons/BP_PickUp_AR.BP_PickUp_AR_C"));
-        }
-        //代替クラスも取得できなかった場合は、無効なクラスでActorを生成しないよう終了します。
-        if (!pickupClass) { return; }
+    //敵BPに指定がない場合も、種類ごとの表示を持つ共通の拾得物BPを使う。
+    TSubclassOf<APickUpBase> pickupClass = m_pPickUpClass;
+    if (!pickupClass)
+    {
+        pickupClass = LoadClass<APickUpBase>(nullptr, TEXT("/Game/Blueprints/Weapons/BP_PickUp_AR.BP_PickUp_AR_C"));
+    }
+    if (!pickupClass) { return; }
 
-        //今回生成するDrop Itemが弾薬かを示します。
-        const bool bAmmo = FMath::FRand() <= 0.65f;
-        //弾薬DropをAR用として生成するかを示します。
-        const bool bUseARAmmo = bAmmo && m_pPlayerChara && m_pPlayerChara->GetCurrentSlot() == EWeaponSlot::AR;
-        //アイテム種類を保持します。
-        const EItemType itemType = bAmmo ? (bUseARAmmo ? EItemType::EIT_ARAmmo : EItemType::EIT_Ammo) : EItemType::EIT_Health;
-        //アイテム値を保持します。
-        const float itemValue = bAmmo ? static_cast<float>(FMath::RandRange(bUseARAmmo ? 18 : 8, bUseARAmmo ? 32 : 15)) : 25.0f;
-        FActorSpawnParameters spawnParameters;
-        spawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-        const FVector dropLocation = GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
-        if (APickUpBase* pickup = GetWorld()->SpawnActor<APickUpBase>(pickupClass, dropLocation, FRotator::ZeroRotator, spawnParameters))
-        {
-            pickup->PickUpItem(itemType, itemValue);
-        }
+    //継戦用の弾を65%、回復品を35%で選び、装備している銃に合う弾を落とす。
+    const bool bAmmo = FMath::FRand() <= 0.65f;
+    const bool bUseARAmmo = bAmmo && m_pPlayerChara && m_pPlayerChara->GetCurrentSlot() == EWeaponSlot::AR;
+    const EItemType itemType = bAmmo ? (bUseARAmmo ? EItemType::EIT_ARAmmo : EItemType::EIT_Ammo) : EItemType::EIT_Health;
+    const float itemValue = bAmmo ? static_cast<float>(FMath::RandRange(bUseARAmmo ? 18 : 8, bUseARAmmo ? 32 : 15)) : 25.0f;
+    //倒れた体と重ならない高さから、拾得物側の浮遊表示を始める。
+    const FVector dropLocation = GetActorLocation() + FVector(0.0f, 0.0f, 80.0f);
+    const FTransform dropTransform(FRotator::ZeroRotator, dropLocation);
+    //BPの初期値がARでも、抽選した種類を設定し終えるまでプレイヤーに拾わせない。
+    APickUpBase* pickup = GetWorld()->SpawnActorDeferred<APickUpBase>(
+        pickupClass, dropTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+    if (pickup)
+    {
+        pickup->SetActorEnableCollision(false);
+        pickup->FinishSpawning(dropTransform);
+        pickup->PickUpItem(itemType, itemValue);
+        pickup->SetActorEnableCollision(true);
+    }
 }
 
 //赤いアウトラインの有効化/無効化を設定する

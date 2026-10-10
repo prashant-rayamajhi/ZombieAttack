@@ -96,6 +96,22 @@ AGoalActor::AGoalActor()
     m_pStatusTextComp->SetWorldSize(42.0f);
     m_pStatusTextComp->SetTextRenderColor(FColor(220, 20, 15));
     m_pStatusTextComp->SetText(FText::FromString(TEXT("EVACUATION LOCKED\nELIMINATE HOSTILES")));
+
+    //魔法の柱ではなく、森林の封鎖区域を抜ける金属製の出口として組み立てる。
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> frameMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> steel(
+        TEXT("/Game/ModularBuildingSet/materials/Metal/metal_trim_green.metal_trim_green"));
+    for (int32 index = 0; index < 3; ++index)
+    {
+        const FName name(*FString::Printf(TEXT("ExitFrame%d"), index));
+        UStaticMeshComponent* frame = CreateDefaultSubobject<UStaticMeshComponent>(name);
+        frame->SetupAttachment(m_pSphereComp);
+        frame->SetStaticMesh(frameMesh.Object);
+        frame->SetMaterial(0, steel.Object);
+        frame->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        frame->SetRelativeLocation(index == 2 ? FVector(0, 0, 300) : FVector(0, index == 0 ? -170 : 170, 150));
+        frame->SetRelativeScale3D(index == 2 ? FVector(0.3f, 3.7f, 0.4f) : FVector(0.3f, 0.3f, 3));
+    }
 }
 
 //毎フレームの更新を行います。
@@ -104,21 +120,6 @@ void AGoalActor::Tick(float _deltaTime)
     //フレームごとの経過時間を使って、移動や表示の変化を更新します。
     Super::Tick(_deltaTime);
     m_visualTime += _deltaTime;
-    if (m_pBeaconBaseComp)
-    {
-        m_pBeaconBaseComp->AddLocalRotation(FRotator(0.0f, _deltaTime * (m_bActivated ? 85.0f : 22.0f), 0.0f));
-    }
-    if (m_pBeaconArrowComp)
-    {
-        const float Hover = FMath::Sin(m_visualTime * 2.5f) * 18.0f;
-        m_pBeaconArrowComp->SetRelativeLocation(FVector(0.0f, 0.0f, 230.0f + Hover));
-        m_pBeaconArrowComp->AddLocalRotation(FRotator(0.0f, _deltaTime * 55.0f, 0.0f));
-    }
-    if (m_pBeaconColumnComp)
-    {
-        const float BreathingScale = 1.0f + FMath::Sin(m_visualTime * 3.0f) * 0.035f;
-        m_pBeaconColumnComp->SetRelativeScale3D(FVector(0.42f * BreathingScale, 0.42f * BreathingScale, 2.1f));
-    }
     if (m_pGoalLightComp)
     {
         const float Pulse = 0.78f + 0.22f * FMath::Sin(m_visualTime * (m_bActivated ? 5.0f : 2.0f));
@@ -207,6 +208,11 @@ void AGoalActor::BeginPlay()
 
     //ゲーム開始時は非アクティブ状態に設定
     SetActorHiddenInGame(false);
+    //旧ビーコンは参照互換のため残すが、出口の通路を隠す回転柱と矢印は表示しない。
+    m_pBeaconColumnComp->SetVisibility(false);
+    m_pBeaconArrowComp->SetVisibility(false);
+    m_pStatusTextComp->SetRelativeLocation(FVector(0, 0, 345));
+    m_pStatusTextComp->SetWorldSize(28.0f);
     SetActorEnableCollision(true);
     m_pSphereComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     ApplyGoalVisualState(false);
@@ -239,24 +245,11 @@ void AGoalActor::ApplyGoalVisualState(bool _bActive)
     //アクティブ状態に応じてゴールの表示を切り替え
     SetActorHiddenInGame(false);
 
-    //Niagaraコンポーネントの表示と色を設定
+    //森林の出口に魔法陣を重ねず、状態は看板と照明で伝える。
     if (m_pMagicCircleComp)
     {
-        m_pMagicCircleComp->SetHiddenInGame(false);
-        if (m_pMagicCircleSystem)
-        {
-            m_pMagicCircleComp->SetAsset(m_pMagicCircleSystem);
-        }
-        if (!m_pMagicCircleComp->IsActive())
-        {
-            m_pMagicCircleComp->Activate(true);
-        }
-
-        //Niagara側のUser Parameter名が違っても確認しやすいように、よく使う名前にも送る
-        m_pMagicCircleComp->SetVariableLinearColor(m_magicCircleColorParameter, goalColor);
-        m_pMagicCircleComp->SetVariableLinearColor(TEXT("User.Color"), goalColor);
-        m_pMagicCircleComp->SetVariableLinearColor(TEXT("User.MagicColor"), goalColor);
-        m_pMagicCircleComp->SetVariableLinearColor(TEXT("User.GoalColor"), goalColor);
+        m_pMagicCircleComp->Deactivate();
+        m_pMagicCircleComp->SetHiddenInGame(true);
     }
 
     //ライトコンポーネントの表示と色を設定
@@ -278,9 +271,9 @@ void AGoalActor::ApplyGoalVisualState(bool _bActive)
     }
     if (m_pStatusTextComp)
     {
-        m_pStatusTextComp->SetText(_bActive ? FText::FromString(TEXT("EVACUATION READY\nENTER THE GREEN BEACON"))
-                                            : FText::FromString(TEXT("EVACUATION LOCKED\nELIMINATE HOSTILES")));
-        m_pStatusTextComp->SetTextRenderColor(_bActive ? FColor(30, 255, 70) : FColor(220, 20, 15));
+        m_pStatusTextComp->SetText(_bActive ? FText::FromString(TEXT("EXIT\nPROCEED TO EXTRACTION"))
+                                            : FText::FromString(TEXT("EXIT CLOSED\nCLEAR THE FOREST")));
+        m_pStatusTextComp->SetTextRenderColor(_bActive ? FColor(160, 210, 166) : FColor(213, 177, 111));
     }
 }
 
@@ -347,6 +340,9 @@ void AGoalActor::OnOverlapBegin(UPrimitiveComponent* _overlappedComponent, AActo
 {
     //オーバーラップイベントの条件をチェック
     if (!m_bActivated || m_bTransitionRequested || !IsValid(_otherActor) || !_otherActor->IsA<APlayerChara>()) { return; }
+    //死亡直後の接触をクリアとして扱わず、ゲームオーバーとの二重遷移を防ぐ。
+    APlayerChara* player = CastChecked<APlayerChara>(_otherActor);
+    if (player->IsDead()) { return; }
 
     //コンポーネントの解決に失敗した場合、処理を中断
     if (!ResolveComponents()) { return; }
@@ -358,11 +354,14 @@ void AGoalActor::OnOverlapBegin(UPrimitiveComponent* _overlappedComponent, AActo
 
     //ゴール到達時の処理をスケジュール
     TWeakObjectPtr<AGoalActor> weakThis(this);
+    TWeakObjectPtr<APlayerChara> weakPlayer(player);
     GetWorldTimerManager().SetTimer(m_clearTimer,
                                     FTimerDelegate::CreateLambda(
-                                        [weakThis]()
+                                        [weakThis, weakPlayer]()
                                         {
                                             if (!weakThis.IsValid()) { return; }
+                                            //到達後の待ち時間に死亡した場合も、死亡画面をクリア画面で上書きしない。
+                                            if (!weakPlayer.IsValid() || weakPlayer->IsDead()) { return; }
                                             AGoalActor* goalActor = weakThis.Get();
                                             if (!goalActor->m_gameClearLevelName.IsNone())
                                             {
@@ -370,5 +369,6 @@ void AGoalActor::OnOverlapBegin(UPrimitiveComponent* _overlappedComponent, AActo
                                                 UGameplayStatics::OpenLevel(goalActor, goalActor->m_gameClearLevelName);
                                             }
                                         }),
-                                    FMath::Max(0.f, m_clearDelay), false);
+                                    //ゼロ秒のTimerは予約を解除するため、即時設定でも次の更新で遷移できる長さにする。
+                                    FMath::Max(0.01f, m_clearDelay), false);
 }

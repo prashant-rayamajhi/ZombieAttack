@@ -226,7 +226,7 @@ void AGunWeapon::SpawnShotImpactEffect(const FHitResult& _hitResult)
     UNiagaraComponent* impactComponent =
         //SystemAt位置を作成します。
         UNiagaraFunctionLibrary::SpawnSystemAtLocation(world, m_impactEffect, _hitResult.ImpactPoint, _hitResult.ImpactNormal.Rotation(),
-                                                       FVector(1.0f), true, true, ENCPoolMethod::None, true);
+                                                       FVector(0.35f), true, true, ENCPoolMethod::None, true);
 
     DestroyNiagaraAfterDelay(impactComponent, m_impactEffectLifetime);
 }
@@ -236,12 +236,18 @@ void AGunWeapon::SpawnMuzzleFlash(const FVector& _location, const FRotator& _rot
 {
     if (!m_muzzleFlash) { return; }
 
-    UNiagaraComponent* flashComponent =
-        //ワールドを返します。
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), m_muzzleFlash, _location, _rotation, FVector(m_muzzleFlashScale), true, true,
-                                                       ENCPoolMethod::None, true);
-
-    DestroyNiagaraAfterDelay(flashComponent, m_muzzleFlashLifetime);
+    //発射後も銃口に追従させ、移動や反動で炎だけ空中に取り残されるのを防ぐ。
+    if (!m_pWeapon || !m_pWeapon->DoesSocketExist(TEXT("MuzzleFlashSocket"))) { return; }
+    UNiagaraComponent* flashComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+        m_muzzleFlash, m_pWeapon, TEXT("MuzzleFlashSocket"), FVector::ZeroVector, FRotator::ZeroRotator,
+        EAttachLocation::SnapToTarget, true, false, ENCPoolMethod::None, true);
+    if (flashComponent)
+    {
+        //暗い森でも標的を隠さない、小さく短い銃口炎に抑える。
+        flashComponent->SetWorldScale3D(FVector(FMath::Min(m_muzzleFlashScale, 0.12f)));
+        flashComponent->Activate(true);
+    }
+    DestroyNiagaraAfterDelay(flashComponent, FMath::Min(m_muzzleFlashLifetime, 0.045f));
 
 }
 

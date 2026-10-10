@@ -1,9 +1,11 @@
 #include "GameFlowScreenWidget.h"
 #include "GameFlowBackdropWidget.h"
+#include "../Style/SurvivalUIStyle.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/Spacer.h"
@@ -118,33 +120,33 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
     m_menu = Menu;
     UOverlaySlot* MenuSlot = RootOverlay->AddChildToOverlay(Menu);
     MenuSlot->SetHorizontalAlignment(HAlign_Left);
-    MenuSlot->SetVerticalAlignment(VAlign_Center);
-    MenuSlot->SetPadding(m_menuPadding);
+    MenuSlot->SetVerticalAlignment(VAlign_Bottom);
+    MenuSlot->SetPadding(FMargin(100, 40, 0, 120));
     //作品名と操作メニューの前に、三画面共通の短い状況表示を置く。
     UTextBlock* chapter = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SceneChapter"));
-    const TCHAR* chapterText = _screen == EGameFlowScreen::Start ? TEXT("SURVIVAL / INFECTED FOREST") :
-        (_screen == EGameFlowScreen::Clear ? TEXT("EXTRACTION / DAYBREAK") : TEXT("SIGNAL LOST / IN THE FOREST"));
+    const TCHAR* chapterText = _screen == EGameFlowScreen::Start ? TEXT("A SURVIVAL ACTION GAME") :
+        (_screen == EGameFlowScreen::Clear ? TEXT("THE FOREST IS BEHIND YOU") : TEXT("YOUR LAST STAND"));
     chapter->SetText(FText::AsCultureInvariant(chapterText));
     chapter->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 13, TEXT("Bold")));
-    chapter->SetColorAndOpacity(FSlateColor(FLinearColor(0.68f, 0.75f, 0.72f)));
+    chapter->SetColorAndOpacity(FSlateColor(SurvivalUI::Muted));
     Menu->AddChildToVerticalBox(chapter)->SetPadding(FMargin(2, 0, 0, 18));
     UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
     Title->SetText(m_titleOverride.IsEmpty() ? GetTitle(_screen) : m_titleOverride);
     Title->SetColorAndOpacity(
         FSlateColor(_screen == EGameFlowScreen::GameOver ? FLinearColor(0.82f, 0.04f, 0.03f, 1.f) : FLinearColor(0.92f, 0.94f, 0.91f, 1.f)));
-    Title->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), FMath::Min(m_titleFontSize, 48), TEXT("Bold")));
-    Title->SetShadowOffset(FVector2D(3.f, 3.f));
+    Title->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), _screen == EGameFlowScreen::Start ? 54 : 42, TEXT("Regular")));
+    Title->SetShadowOffset(FVector2D(1.f, 1.f));
     Title->SetShadowColorAndOpacity(FLinearColor::Black);
     Menu->AddChildToVerticalBox(Title);
     UTextBlock* Subtitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Subtitle"));
     Subtitle->SetText(m_subtitleOverride.IsEmpty() ? GetSubtitle(_screen) : m_subtitleOverride);
     Subtitle->SetColorAndOpacity(FSlateColor(FLinearColor(0.72f, 0.76f, 0.78f, 1.f)));
-    Subtitle->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), m_subtitleFontSize));
+    Subtitle->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 16));
     UVerticalBoxSlot* SubtitleSlot = Menu->AddChildToVerticalBox(Subtitle);
     SubtitleSlot->SetPadding(FMargin(2.f, 4.f, 0.f, 30.f));
 
     const FText PrimaryLabel =
-        _screen == EGameFlowScreen::Start ? FText::AsCultureInvariant(TEXT("ENTER THE FOREST")) : FText::AsCultureInvariant(TEXT("PLAY AGAIN"));
+        _screen == EGameFlowScreen::Start ? FText::AsCultureInvariant(TEXT("START GAME")) : FText::AsCultureInvariant(TEXT("TRY AGAIN"));
     m_pPrimaryButton = AddMenuButton(Menu, PrimaryLabel, TEXT("PrimaryButton"));
     m_pPrimaryButton->OnClicked.AddDynamic(this, &UGameFlowScreenWidget::HandlePrimaryAction);
     if (_screen != EGameFlowScreen::Start)
@@ -156,7 +158,7 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
     m_pQuitButton = AddMenuButton(Menu, FText::AsCultureInvariant(TEXT("QUIT")), TEXT("QuitButton"));
     m_pQuitButton->OnClicked.AddDynamic(this, &UGameFlowScreenWidget::HandleQuitAction);
     UTextBlock* ControllerHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ControllerHint"));
-    ControllerHint->SetColorAndOpacity(FSlateColor(FLinearColor(0.48f, 0.72f, 0.70f, 1.0f)));
+    ControllerHint->SetColorAndOpacity(FSlateColor(SurvivalUI::Muted));
     ControllerHint->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 13));
     UVerticalBoxSlot* HintSlot = Menu->AddChildToVerticalBox(ControllerHint);
     HintSlot->SetPadding(FMargin(2.f, 12.f, 0.f, 0.f));
@@ -168,7 +170,7 @@ void UGameFlowScreenWidget::BuildScreen(EGameFlowScreen _screen)
         (_screen == EGameFlowScreen::Clear ? TEXT("THE GATE IS OPEN\nYou made it out of the forest.") :
                                              TEXT("ONE MORE CHANCE\nKeep your distance. Reload before they close in."));
     objective->SetText(FText::AsCultureInvariant(message));
-    objective->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 16));
+    objective->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 13));
     objective->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.68f, 0.65f)));
     UOverlaySlot* objectiveSlot = RootOverlay->AddChildToOverlay(objective);
     objectiveSlot->SetHorizontalAlignment(HAlign_Right);
@@ -206,8 +208,8 @@ void UGameFlowScreenWidget::NativeTick(const FGeometry& _geometry, float _deltaT
                               (GetOwningPlayer() && button->HasUserFocus(GetOwningPlayer()));
         m_buttonWeights[index] = FMath::FInterpTo(m_buttonWeights[index], selected ? 1.0f : 0.0f, _deltaTime, 12.0f);
         const float weight = m_buttonWeights[index];
-        button->SetRenderTranslation(FVector2D(8.0f * weight, 0.0f));
-        button->SetBackgroundColor(FMath::Lerp(FLinearColor(0.025f, 0.035f, 0.04f), FLinearColor(0.24f, 0.09f, 0.07f), weight));
+        button->SetRenderTranslation(FVector2D::ZeroVector);
+        button->SetBackgroundColor(FMath::Lerp(FLinearColor(0.01f, 0.015f, 0.012f, 0.2f), FLinearColor(0.2f, 0.22f, 0.16f, 0.85f), weight));
         if (selected) { focused = index; }
     }
     if (focused != INDEX_NONE && focused != m_focusedIndex && m_focusedIndex != INDEX_NONE) { PlaySelectSound(); }
@@ -245,15 +247,24 @@ UButton* UGameFlowScreenWidget::AddMenuButton(UVerticalBox* _parent, const FText
     //配置先のVerticalBoxがない場合はWidgetを構築できないため、参照なしを返して終了します。
     if (!_parent) { return nullptr; }
     UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), _widgetName);
+    //光沢のある標準ボタンを使わず、文字と薄い面だけで選択位置を伝える。
+    FButtonStyle style;
+    style.Normal = *FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
+    style.Hovered = style.Normal;
+    style.Pressed = style.Normal;
+    style.NormalPadding = FMargin(0);
+    style.PressedPadding = FMargin(0);
+    Button->SetStyle(style);
     Button->SetBackgroundColor(FLinearColor(0.025f, 0.035f, 0.04f, 0.92f));
     Button->SetColorAndOpacity(FLinearColor::White);
     UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
     Label->SetText(_label);
     Label->SetJustification(ETextJustify::Left);
     Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.88f, 0.9f, 0.9f, 1.f)));
-    Label->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 21, TEXT("Bold")));
+    Label->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 20, TEXT("Regular")));
     Label->SetMargin(FMargin(20.f, 12.f));
     Button->SetContent(Label);
+    if (UButtonSlot* contentSlot = Cast<UButtonSlot>(Label->Slot)) { contentSlot->SetHorizontalAlignment(HAlign_Left); }
     UVerticalBoxSlot* ButtonSlot = _parent->AddChildToVerticalBox(Button);
     ButtonSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
     ButtonSlot->SetHorizontalAlignment(HAlign_Fill);

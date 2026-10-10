@@ -27,7 +27,8 @@ float AFinalBossChara::ModifyUtilityScore(EBossTacticalAction _action, const FBo
 
     case EBossTacticalAction::ChargeRush:
         modifiedScore +=
-            0.10f + ((_context.m_bPlayerHealing || _context.m_bPlayerReloading) ? 0.34f : 0.0f) + (_context.m_bPlayerMovingAwayFromBoss ? 0.16f : 0.0f);
+            0.10f + ((_context.m_bPlayerHealing || _context.m_bPlayerReloading) ? 0.34f : 0.0f)
+            + (_context.m_bPlayerMovingAwayFromBoss ? 0.16f : 0.0f);
         break;
 
     case EBossTacticalAction::BackStep: modifiedScore += 0.08f + (_context.m_recentBossDamagePressure * 0.22f); break;

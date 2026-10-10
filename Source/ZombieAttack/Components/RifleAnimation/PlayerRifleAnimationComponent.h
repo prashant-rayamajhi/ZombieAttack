@@ -43,6 +43,8 @@ class ZOMBIEATTACK_API UPlayerRifleAnimationComponent : public UActorComponent
     //エイム状態を返します。
     ERifleAimState GetAimState() const { return m_aimState; }
     bool IsAimReadyPoseActive() const;
+    //構えクリップの握り手から添え手への向きを求め、モデルの正面との角度差を補正する。
+    FVector GetAimPoseDirection() const;
     FOnRifleAimReady& OnAimReady() { return m_onAimReady; }
 
   protected:

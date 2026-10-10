@@ -224,10 +224,12 @@ void APlayerChara::BeginPlay()
         {
             //武器切り替えUIはHUDより前面に出します。
             m_pWeaponCarousel->AddToViewport(20);
-            m_pWeaponCarousel->SetAnchorsInViewport(FAnchors(0.0f, 0.0f));
-            m_pWeaponCarousel->SetAlignmentInViewport(FVector2D::ZeroVector);
-            m_pWeaponCarousel->SetPositionInViewport(FVector2D(32.0f, 158.0f), false);
-            m_pWeaponCarousel->SetDesiredSizeInViewport(FVector2D(360.0f, 300.0f));
+            //HP上端から18px空け、解像度が変わっても武器一覧を左下へ固定する。
+            m_pWeaponCarousel->SetAlignmentInViewport(FVector2D(0.0f, 1.0f));
+            m_pWeaponCarousel->SetPositionInViewport(FVector2D(32.0f, -164.0f), false);
+            m_pWeaponCarousel->SetDesiredSizeInViewport(FVector2D(360.0f, 180.0f));
+            //位置とサイズの指定でアンカーが左上へ戻るため、左下固定は最後に設定する。
+            m_pWeaponCarousel->SetAnchorsInViewport(FAnchors(0.0f, 1.0f));
             m_pWeaponCarousel->SetVisibility(ESlateVisibility::HitTestInvisible);
         }
     }

@@ -24,7 +24,20 @@ void ADayNightCycleManager::BeginPlay()
     Super::BeginPlay();
 
     //固定時刻のステージではエディタの照明をそのまま使い、不要な毎フレーム更新も止めます。
-    if (m_useLevelLighting) { SetActorTickEnabled(false); return; }
+    if (m_useLevelLighting)
+    {
+        //固定の森は空メッシュを含む通常キャプチャを使い、SkyAtmosphereがない場合の黒い環境光を防ぐ。
+        for (TActorIterator<ASkyLight> sky(GetWorld()); sky; ++sky)
+        {
+            if (USkyLightComponent* light = sky->GetLightComponent())
+            {
+                light->SetRealTimeCaptureEnabled(false);
+                light->RecaptureSky();
+            }
+        }
+        SetActorTickEnabled(false);
+        return;
+    }
 
     //配置済みのPostProcessVolumeを本編用の露出へ統一します。
     ApplyGameplayPostProcess();
@@ -53,7 +66,8 @@ void ADayNightCycleManager::BeginPlay()
     if (m_pSkyLightActor && m_pSkyLightActor->GetLightComponent())
     {
         m_pSkyLightActor->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-        m_pSkyLightActor->GetLightComponent()->SetRealTimeCaptureEnabled(true);
+        //空の更新はTick内の間隔指定で行い、二つのキャプチャ方式を同時に使わない。
+        m_pSkyLightActor->GetLightComponent()->SetRealTimeCaptureEnabled(false);
     }
 
     //太陽の回転と照度を実行中に変更できるよう、ライトをMovableにします。

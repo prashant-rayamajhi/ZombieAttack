@@ -1,5 +1,6 @@
 #include "PlayerRifleAnimationComponent.h"
-
+#include "Animation/AnimSequence.h"
+#include "Animation/Skeleton.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
@@ -7,6 +8,46 @@
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UnrealType.h"
+
+//構えが十分に混ざった後は実際の両手を使い、脚の姿勢と合成した際の角度差も含めて求める。
+FVector UPlayerRifleAnimationComponent::GetAimPoseDirection() const
+{
+    if (USkeletalMeshComponent* mesh = m_pTargetMesh.Get())
+    {
+        UAnimInstance* animation = mesh->GetAnimInstance();
+        const FAnimMontageInstance* montage = animation ? animation->GetActiveInstanceForMontage(m_pActiveMontage) : nullptr;
+        if (montage && montage->GetWeight() > 0.95f && (m_aimState == ERifleAimState::Raising || m_aimState == ERifleAimState::Ready))
+        {
+            //ワールド角ではなくメッシュ内の向きを読むため、本体の回転を重ねて補正しない。
+            const FVector grip = mesh->GetBoneLocation(TEXT("RightHand"), EBoneSpaces::ComponentSpace);
+            const FVector support = mesh->GetBoneLocation(TEXT("LeftHand"), EBoneSpaces::ComponentSpace);
+            const FVector direction = (support - grip).GetSafeNormal2D();
+            if (!direction.IsNearlyZero()) { return direction; }
+        }
+    }
+    //構え始めの一瞬は直前の待機姿勢を使わず、構えクリップの基準方向へ向ける。
+    const UAnimSequence* clip = Cast<UAnimSequence>(m_pRifleAimingIdleAnimation);
+    if (!clip || !clip->GetSkeleton()) { return FVector::RightVector; }
+    const FReferenceSkeleton& skeleton = clip->GetSkeleton()->GetReferenceSkeleton();
+    FVector hands[2];
+    const FName names[] = {TEXT("RightHand"), TEXT("LeftHand")};
+    for (int32 hand = 0; hand < 2; ++hand)
+    {
+        int32 bone = skeleton.FindBoneIndex(names[hand]);
+        if (bone == INDEX_NONE) { return FVector::RightVector; }
+        FTransform pose = FTransform::Identity;
+        while (bone != INDEX_NONE)
+        {
+            FTransform local;
+            clip->GetBoneTransform(local, FSkeletonPoseBoneIndex(bone), FAnimExtractContext(0.25), false);
+            pose *= local;
+            bone = skeleton.GetParentIndex(bone);
+        }
+        hands[hand] = pose.GetLocation();
+    }
+    const FVector direction = (hands[1] - hands[0]).GetSafeNormal2D();
+    return direction.IsNearlyZero() ? FVector::RightVector : direction;
+}
 
 //プレイヤーライフルアニメーションコンポーネントを処理します。
 UPlayerRifleAnimationComponent::UPlayerRifleAnimationComponent()
@@ -80,6 +121,13 @@ void UPlayerRifleAnimationComponent::PlayRaiseTransition()
 void UPlayerRifleAnimationComponent::EnterAimReady()
 {
     if (m_aimState != ERifleAimState::Raising) { return; }
+    //別の動作に割り込まれた構えを、残ったタイマーだけで発射可能に戻さない。
+    const UAnimInstance* instance = m_pTargetMesh.IsValid() ? m_pTargetMesh->GetAnimInstance() : nullptr;
+    if (!instance || !m_pActiveMontage || !instance->Montage_IsPlaying(m_pActiveMontage))
+    {
+        StopAimSequence(0.0f);
+        return;
+    }
     if (UWorld* world = GetWorld())
     {
         world->GetTimerManager().ClearTimer(m_sequenceTimer);
@@ -148,6 +196,16 @@ void UPlayerRifleAnimationComponent::TickComponent(float _deltaTime, ELevelTick 
 {
     Super::TickComponent(_deltaTime, _tickType, _tickFunction);
 
+    //構え中にモンタージュが止まったら待機へ戻し、次の入力で構え直せるようにする。
+    if (m_aimState == ERifleAimState::Raising || m_aimState == ERifleAimState::Ready)
+    {
+        const UAnimInstance* instance = m_pTargetMesh.IsValid() ? m_pTargetMesh->GetAnimInstance() : nullptr;
+        if (!instance || !m_pActiveMontage || !instance->Montage_IsPlaying(m_pActiveMontage))
+        {
+            StopAimSequence(0.0f);
+            return;
+        }
+    }
     //AnimBPが値を更新しても、照準・リロード中は上半身ウェイトを維持します。
     if (m_aimState != ERifleAimState::Inactive)
     {

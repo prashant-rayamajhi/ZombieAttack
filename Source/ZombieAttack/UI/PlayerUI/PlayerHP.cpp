@@ -1,4 +1,5 @@
 #include "PlayerHP.h"
+#include "../Style/SurvivalUIStyle.h"
 #include "../../Player/PlayerChara.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
@@ -61,6 +62,7 @@ void UPlayerHP::NativeOnInitialized()
         //体力HUDを作成します。
         BuildHealthHUD();
     }
+    SurvivalUI::Apply(WidgetTree);
 }
 
 //画面左下に、廃墟の端末をイメージしたHPパネルを構築する
@@ -173,7 +175,7 @@ void UPlayerHP::NativeTick(const FGeometry& _geometry, float _deltaTime)
     {
         m_healthBar->SetPercent(m_displayedHealthRatio);
         //体力色を保持します。
-        const FLinearColor healthColor = m_displayedHealthRatio > 0.55f ? FLinearColor(0.08f, 0.84f, 0.25f, 1.0f)
+        const FLinearColor healthColor = m_displayedHealthRatio > 0.55f ? SurvivalUI::Health
                                                                         : (m_displayedHealthRatio > 0.25f ? FLinearColor(0.96f, 0.55f, 0.05f, 1.0f)
                                                                                                           : FLinearColor(0.95f, 0.05f, 0.03f, 1.0f));
         m_healthBar->SetFillColorAndOpacity(healthColor);
@@ -196,7 +198,7 @@ void UPlayerHP::NativeTick(const FGeometry& _geometry, float _deltaTime)
     //透明度を保持します。
     const float alpha = m_damagePulseRemaining / pulseDuration;
     const float pulse = FMath::Sin(alpha * PI);
-    const float scaleAmount = m_bHealingPulse ? 0.065f : 0.045f;
+    const float scaleAmount = 0.0f;
     m_healthPanel->SetRenderScale(FVector2D(1.0f + pulse * scaleAmount));
     const FLinearColor pulseColor = m_bHealingPulse ? FLinearColor(0.01f, 0.22f, 0.045f, 0.98f) : FLinearColor(0.24f, 0.01f, 0.01f, 0.98f);
     m_healthPanel->SetBrushColor(FMath::Lerp(FLinearColor(0.015f, 0.018f, 0.020f, 0.94f), pulseColor, pulse * 0.72f));

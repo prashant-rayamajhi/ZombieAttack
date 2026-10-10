@@ -1,4 +1,5 @@
 #include "BossChara.h"
+#include "ZombieAttack/AIController/EnemyForestBlock.h"
 #include "ZombieAttack/Player/PlayerChara.h"
 #include "ZombieAttack/AIController/BossAIController.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -14,6 +15,52 @@
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+
+//前段の終了通知を切り離してから再生し、実際の再生速度で所要時間を計算する。
+float ABossChara::PlayBossMontage(UAnimMontage* _montage)
+{
+    UAnimInstance* instance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+    if (!instance || !IsMontageCompatible(_montage)) { return 0.0f; }
+    TrackBossMontage(nullptr);
+    const float duration = instance->Montage_Play(_montage, 1.0f, EMontagePlayReturnType::Duration);
+    if (duration > 0.0f) { TrackBossMontage(_montage); }
+    return duration;
+}
+
+//同じモンタージュを連撃で再利用しても、前段の終了通知を次段へ持ち越さない。
+void ABossChara::TrackBossMontage(UAnimMontage* _montage)
+{
+    UAnimInstance* instance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+    if (instance && m_actionMontage)
+    {
+        FOnMontageEnded cleared;
+        instance->Montage_SetEndDelegate(cleared, m_actionMontage);
+        FOnMontageBlendingOutStarted clearedBlend;
+        instance->Montage_SetBlendingOutDelegate(clearedBlend, m_actionMontage);
+    }
+    m_actionMontage = _montage;
+    if (!instance || !m_actionMontage) { return; }
+    FOnMontageEnded ended;
+    ended.BindUObject(this, &ABossChara::OnBossMontageEnded);
+    instance->Montage_SetEndDelegate(ended, m_actionMontage);
+    FOnMontageBlendingOutStarted blending;
+    blending.BindUObject(this, &ABossChara::OnBossMontageBlendingOut);
+    instance->Montage_SetBlendingOutDelegate(blending, m_actionMontage);
+}
+
+//自然な振り終わりは終了通知へ任せ、中断された場合だけ即座に判定を閉じる。
+void ABossChara::OnBossMontageBlendingOut(UAnimMontage* _montage, bool _interrupted)
+{
+    if (_interrupted && _montage == m_actionMontage) { FinishBossAttack(); }
+}
+
+//倒された後や段階移行後に古い攻撃の終了通知が届いても、新しい動作へ干渉させない。
+void ABossChara::OnBossMontageEnded(UAnimMontage* _montage, bool _interrupted)
+{
+    if (_montage != m_actionMontage) { return; }
+    m_actionMontage = nullptr;
+    FinishBossAttack();
+}
 
 //パンチと突進は手足の接触、スラムは接地時の範囲判定を使う。
 void ABossChara::SetAttackCollisionEnabled(bool _bEnabled)
@@ -102,7 +149,7 @@ void ABossChara::PlayComboStep()
     //アニメーションモンタージュを再生するか、攻撃を終了する
     if (montageToPlay)
     {
-        const float montageDuration = PlayAnimMontage(montageToPlay);
+        const float montageDuration = PlayBossMontage(montageToPlay);
         if (montageDuration <= 0.0f)
         {
             FinishBossAttack();
@@ -143,20 +190,12 @@ void ABossChara::RequestComboBranchFromNotify()
     //連撃用の通知でスラムや突進を途中終了させず、各攻撃の終了時刻まで再生する
     if (m_currentPattern != EBossAttackPattern::LightCombo) { return; }
 
-    //コンボ攻撃がヒットしていない場合、攻撃を終了
-    if (!m_bComboHitConfirmed || !CanHitPlayer(GetContactAttackRange()))
-    {
-        FinishBossAttack();
-        return;
-    }
+    //空振りでも振り終わるまでは足を止め、終了通知から硬直時間を数える。
+    if (!m_bComboHitConfirmed || !CanHitPlayer(GetContactAttackRange())) { return; }
 
     //次のコンボステップのインデックスを計算
     const int32 nextComboIndex = m_currentComboIndex + 1;
-    if (!m_comboAttackMontages.IsValidIndex(nextComboIndex))
-    {
-        FinishBossAttack();
-        return;
-    }
+    if (!m_comboAttackMontages.IsValidIndex(nextComboIndex)) { return; }
 
     //次のコンボステップを再生
     m_currentComboIndex = nextComboIndex;
@@ -174,7 +213,7 @@ void ABossChara::DoPowerSlam()
     //パワースラムのアニメーションモンタージュを再生するか、攻撃を終了する
     if (IsMontageCompatible(m_pPowerSlamMontage))
     {
-        const float montageDuration = PlayAnimMontage(m_pPowerSlamMontage);
+        const float montageDuration = PlayBossMontage(m_pPowerSlamMontage);
         if (montageDuration <= 0.0f)
         {
             FinishBossAttack();
@@ -224,6 +263,7 @@ void ABossChara::DoChargeRush()
     //別モデル向けの短い走行を全身へ混ぜず、このボスの走行を二周期使う。
     UAnimInstance* instance = GetMesh()->GetAnimInstance();
     UAnimSequence* run = GetRunAnimation();
+    TrackBossMontage(nullptr);
     UAnimMontage* rush = instance && run ?
         instance->PlaySlotAnimationAsDynamicMontage(run, TEXT("DefaultSlot"), 0.08f, 0.16f, 1.0f, 2) : nullptr;
     if (!rush)
@@ -231,6 +271,7 @@ void ABossChara::DoChargeRush()
         FinishBossAttack();
         return;
     }
+    TrackBossMontage(rush);
     if (m_pChargeVFX)
     {
         //エフェクト位置を保持します。
@@ -278,6 +319,14 @@ void ABossChara::UpdateChargeRush(float _deltaTime)
     }
     UCharacterMovementComponent* movement = GetCharacterMovement();
     movement->MaxWalkSpeed = FMath::Min(600.0f, m_chargeDistance / (m_rushDuration - 0.18f));
+    //通常の経路探索を経由しない突進でも、道の外へ踏み込む前に中断する。
+    const FVector next = GetActorLocation() + m_rushDirection * FMath::Max(70.0f, movement->MaxWalkSpeed * _deltaTime);
+    if (AEnemyForestBlock::BlocksStep(GetWorld(), GetActorLocation(), next, GetCapsuleComponent()->GetScaledCapsuleRadius()))
+    {
+        GetMesh()->GetAnimInstance()->Montage_Stop(0.15f);
+        FinishBossAttack();
+        return;
+    }
     AddMovementInput(m_rushDirection, 1.0f);
     //壁や大きな障害物が直前にあれば、足だけ走り続けず突進を打ち切る。
     FHitResult obstacle;
@@ -296,12 +345,20 @@ void ABossChara::UpdateChargeRush(float _deltaTime)
 //バックステップ攻撃を実行する関数
 void ABossChara::DoBackStep()
 {
+    //後退先が森なら技を始めず、道の外へ吹き飛ばす移動を発生させない。
+    const float distance = FMath::Min(350.0f, m_chargeDistance * 0.5f);
+    const FVector landing = GetActorLocation() - GetActorForwardVector() * distance;
+    if (AEnemyForestBlock::BlocksStep(GetWorld(), GetActorLocation(), landing, GetCapsuleComponent()->GetScaledCapsuleRadius()))
+    {
+        FinishBossAttack();
+        return;
+    }
     if (!IsMontageCompatible(m_pBackStepMontage))
     {
         FinishBossAttack();
         return;
     }
-    const float montageDuration = PlayAnimMontage(m_pBackStepMontage);
+    const float montageDuration = PlayBossMontage(m_pBackStepMontage);
     if (montageDuration <= 0.0f)
     {
         FinishBossAttack();
@@ -319,7 +376,7 @@ void ABossChara::DoBackStep()
     }
 
     //バックステップの距離を計算して後方にインパルスを加える
-    const FVector backward = -GetActorForwardVector() * FMath::Min(350.0f, m_chargeDistance * 0.5f) / FMath::Max(0.2f, montageDuration);
+    const FVector backward = -GetActorForwardVector() * distance / FMath::Max(0.2f, montageDuration);
     if (UCharacterMovementComponent* movementComponent = GetCharacterMovement())
     {
         LaunchCharacter(backward, true, true);
@@ -333,11 +390,8 @@ void ABossChara::DoBackStep()
 void ABossChara::FinishBossAttack()
 {
     if (IsDead() || m_bRecovering || m_bIsTransitioning || !m_bAttacking) { return; }
-    //AM_MutantSlam側の終了通知が早くても、最後の地面衝撃だけは欠落させません。
-    if (m_bAttacking && m_currentPattern == EBossAttackPattern::PowerSlam && !m_bPowerSlamEffectSpawned)
-    {
-        SpawnPowerSlamEffect();
-    }
+    //衝撃は接地通知だけで生成し、中断や空振りの終了時に後から発生させない。
+    TrackBossMontage(nullptr);
 
     GetWorldTimerManager().ClearTimer(m_chargeTimer);
     GetWorldTimerManager().ClearTimer(m_powerSlamEffectTimer);
@@ -383,6 +437,7 @@ void ABossChara::FinishBossAttack()
 //死亡や段階移行の前に、以前の攻撃から残った命中・終了の予約をすべて取り消す
 void ABossChara::ClearCombatTimers()
 {
+    TrackBossMontage(nullptr);
     GetWorldTimerManager().ClearTimer(m_chargeTimer);
     GetWorldTimerManager().ClearTimer(m_powerSlamEffectTimer);
     GetWorldTimerManager().ClearTimer(m_lightComboEffectTimer);
